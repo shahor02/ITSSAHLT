@@ -43,7 +43,7 @@ TTree* treeInp = 0;
 AliRunLoader* runLoader = 0;
 AliESDEvent* esd=0;
 
-TStopwatch swTot,swTracklets;
+TStopwatch swTot,swTracklets,swTracks;
 
 void ProcessEvent(int iev);
 void Process(const char* path);
@@ -56,6 +56,7 @@ void Process(const char* inpData)
   //
   swTot.Stop();
   swTracklets.Stop();
+  swTracks.Stop();
   AliCDBManager* man = AliCDBManager::Instance();
   man->SetDefaultStorage("local://$ALICE_ROOT/OCDB");
   man->SetRun(0);
@@ -85,8 +86,10 @@ void Process(const char* inpData)
   }
   swTot.Stop();
   swTracklets.Stop();
+  swTracks.Stop();
   printf("Total:       "); swTot.Print();
   printf("Trackleting: "); swTracklets.Print();
+  printf("Tracking   : "); swTracks.Print();
 
 }
 
@@ -133,7 +136,8 @@ void ProcChunk(const char* path)
   }
   esd->ReadFromTree(treeInp);
   //
-  for(Int_t iEv=0; iEv<runLoader->GetNumberOfEvents(); iEv++){
+  //  for(Int_t iEv=0; iEv<runLoader->GetNumberOfEvents(); iEv++){
+  for(Int_t iEv=7; iEv<8; iEv++){
     printf("ev %d\n",iEv);
     ProcessEvent(iEv);
   }
@@ -184,6 +188,10 @@ void TestTracker(TTree* tRP, const AliESDVertex* vtx)
   swTracklets.Stop();
   swTot.Stop();
   tracker->PrintTracklets();
+  //
+  swTracks.Start(0);
+  tracker->Tracklets2Tracks();
+  swTracks.Stop();
   //
   vtx->Print();
   esd->GetMultiplicity()->Print("t");

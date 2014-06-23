@@ -266,7 +266,7 @@ void AliXXXITSTracker::Tracklets2Tracks()
   //
   for (int ila=2;ila<kNLrActive;ila++) {
     if (fSkipLayer[ila]) continue;
-    fLayers[ila]->SortClusters(fSPDVertex);
+    fLayers[ila]->SortClusters(0);
     fNClusters[ila] = fLayers[ila]->GetNClusters();
   }
   //
@@ -276,11 +276,28 @@ void AliXXXITSTracker::Tracklets2Tracks()
   for (int itr=0;itr<nTrk;itr++) {
     ITStrack_t &track = fTracks[fNTracks];
     if (!CreateTrack(track, fTracklets[itr])) continue;
-    for (int lrID=kLrShield1;lrID<kMaxLrITS;lrID++) if (!FollowToLayer(track,lrID)) break;
+    Bool_t res;
+    for (int lrID=kLrShield1;lrID<kMaxLrITS;lrID++) if (!(res=FollowToLayer(track,lrID))) break;
+    if (!res) continue;
     CookLabel(track);
+    printf("Track %d for tracklet %d\n",fNTracks,itr); PrintTrack(track);
     fNTracks++;
     //
   }  
+}
+
+//______________________________________________
+void AliXXXITSTracker::PrintTrack(AliXXXITSTracker::ITStrack_t& track)
+{
+  // print track info
+  printf("Chi2 = %f for %d clusters\n",track.chi2,track.ncl);
+  for (int ilr=0;ilr<kNLrActive;ilr++) {
+    if (track.clID[ilr]<0) continue;
+    AliITSRecPoint* cl = fLayers[ilr]->GetClusterSorted(track.clID[ilr]);
+    printf("L%d #%4d ",ilr,track.clID[ilr]);
+    for (int i=0;i<3;i++) printf("%d ",cl->GetLabel(i)); printf("\n");
+  }
+  track.param.Print();
 }
 
 //______________________________________________
@@ -423,7 +440,7 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
   if (!trCopy.PropagateTo(xToGo,fBz)) return kFALSE;
   double xyz[3];
   trCopy.GetXYZ(xyz);
-  double phi=TMath::ATan2(xyz[1],xyz[2]),z=trCopy.GetZ();
+  double phi=TMath::ATan2(xyz[1],xyz[0]),z=trCopy.GetZ();
   // we need track errors in the plane nearly tangential to crossing point
   if (!trCopy.Rotate(phi)) return kFALSE;
   double dphi = TMath::Sqrt(trCopy.GetSigmaY2()*fNSigma2[lrIDA]+fYToler2[lrIDA])/fgkRLayITS[lrID];
@@ -470,8 +487,7 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
   if (track.chi2 > GetChi2TotCut(track.ncl+1)) return kFALSE;
   track.param = bestTr;
   track.clID[lrIDA] = iclBest;
-  if (bestTr.CorrectForMeanMaterial(fgkX2X0ITS[lrID],fgkRhoLITS[lrID],fgkDefMass,kFALSE)) return kFALSE;
-  return kTRUE;
+  return bestTr.CorrectForMeanMaterial(fgkX2X0ITS[lrID],fgkRhoLITS[lrID],fgkDefMass,kFALSE);
   //
 }
 
@@ -524,6 +540,6 @@ Double_t AliXXXITSTracker::GetXatLabRLin(AliExternalTrackParam& track, double r)
   double t0=x+tg*y, t1=x*x+y*y-r*r, det=t0*t0-t1/cs2;
   if (det<0) return -999; // does not touch circle
   det = TMath::Sqrt(det);
-  return x+(t0+det)*cs2;
+  return x+(det-t0)*cs2;
   //
 }

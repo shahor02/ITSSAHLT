@@ -73,6 +73,7 @@ class AliXXXITSTracker : public TObject
   Bool_t  FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_t lrID);
   Double_t GetXatLabRLin(AliExternalTrackParam& track, double r);
   void    CookLabel(AliXXXITSTracker::ITStrack_t track);
+  void    PrintTrack(AliXXXITSTracker::ITStrack_t& track);
   // methods for track reconstruction -------<<<
   //
  protected:

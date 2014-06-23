@@ -1,4 +1,4 @@
-{
+void runt(){
   //
   gROOT->ProcessLine(".L AliXXXAux.cxx+");
   gROOT->ProcessLine(".L AliXXXLayer.cxx+");
