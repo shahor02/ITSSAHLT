@@ -6,6 +6,7 @@
 #include "AliVParticle.h"
 
 
+
 ClassImp(AliXXXITSTracker)
 
 const Float_t AliXXXITSTracker::fgkZSpanITS[AliXXXITSTracker::kMaxLrITS] = 
@@ -41,6 +42,16 @@ const Int_t    AliXXXITSTracker::fgkLrDefBins[AliXXXITSTracker::kNLrActive][2] =
 const Float_t AliXXXITSTracker::fgkDefMass = 0.14;
 const Int_t   AliXXXITSTracker::fgkDummyLabel = -3141593;
 
+#ifdef _TIMING_
+const char* AliXXXITSTracker::fgkSWNames[AliXXXITSTracker::kNSW] = {
+  "Total:     "
+  ,"Tracklets: "
+  ,"Tracks:    "
+  ,"Vertex:    "
+};
+#endif
+
+
 //______________________________________________
 AliXXXITSTracker::AliXXXITSTracker() :
   fBlacklist(0)
@@ -58,7 +69,9 @@ AliXXXITSTracker::AliXXXITSTracker() :
   //
   ,fMinPt(0.3)
   ,fCurvMax(0)
-  ,fMaxChi2Tr2Cl(15)
+  ,fZSPD2CutMin(1e9)
+  ,fZSPD2CutMax(-1e9)
+  ,fMaxChi2Tr2Cl(35)
   //
   ,fSPDVertex(0)
 {
@@ -109,7 +122,43 @@ void AliXXXITSTracker::Init()
   //
   fBlacklist = new TBits(100*100);
   //
+#ifdef _TIMING_
+  for (int i=kNSW;i--;) {
+    fSW[i].Stop();
+    fSW[i].Reset();
+  }
+#endif
 }
+
+//______________________________________________
+void AliXXXITSTracker::ProcessEvent()
+{
+  // do full reconstruction
+#ifdef _TIMING_
+  fSW[kSWTotal].Start(0);
+  fSW[kSWTracklets].Start(0);
+#endif
+  //
+  FindTracklets();
+  //
+#ifdef _TIMING_
+  fSW[kSWTracklets].Stop();
+  fSW[kSWTracks].Start(0);
+#endif
+  //
+  Tracklets2Tracks();
+  //
+#ifdef _TIMING_
+  fSW[kSWTracks].Stop();
+#endif
+  //
+#ifdef _TIMING_
+  fSW[kSWTotal].Stop();
+  PrintTiming();
+#endif
+  //
+}
+
 
 //______________________________________________
 void AliXXXITSTracker::Clear(Option_t*)
@@ -160,8 +209,8 @@ Bool_t AliXXXITSTracker::FindTracklets()
   fPhiShiftSc = fPhiShift*TMath::Abs(fBz/5.0);
   fDPhiTol = fDPhiTrackletSc + fPhiShiftSc;
   //
-  AliXXXLayer &spdL1 = *fLayers[0];
-  AliXXXLayer &spdL2 = *fLayers[1];
+  AliXXXLayer &spdL1 = *fLayers[kALrSPD1];
+  AliXXXLayer &spdL2 = *fLayers[kALrSPD2];
   spdL1.SortClusters(fSPDVertex);
   spdL2.SortClusters(fSPDVertex);
   fNClusters[0] = spdL1.GetNClusters();
@@ -185,8 +234,8 @@ Bool_t AliXXXITSTracker::FindTracklets()
 Int_t AliXXXITSTracker::AssociateClusterOfL2(int icl2)
 {
   // find SPD1 cluster matching to SPD2 cluster icl2
-  AliXXXLayer &spdL1 = *fLayers[0];
-  AliXXXLayer &spdL2 = *fLayers[1];
+  AliXXXLayer &spdL1 = *fLayers[kALrSPD1];
+  AliXXXLayer &spdL2 = *fLayers[kALrSPD2];
   AliXXXLayer::ClsInfo* cli2 = spdL2.GetClusterInfo(icl2);
   // expected z at SPD1
   float zV = fSPDVertex->GetZ();
@@ -264,7 +313,7 @@ void AliXXXITSTracker::Tracklets2Tracks()
   //
   CalcAuxTracking(); // RS??? do we need to repeat this?
   //
-  for (int ila=2;ila<kNLrActive;ila++) {
+  for (int ila=kALrSDD1;ila<kNLrActive;ila++) {
     if (fSkipLayer[ila]) continue;
     fLayers[ila]->SortClusters(0);
     fNClusters[ila] = fLayers[ila]->GetNClusters();
@@ -274,23 +323,36 @@ void AliXXXITSTracker::Tracklets2Tracks()
   fNTracks = 0;
   //
   for (int itr=0;itr<nTrk;itr++) {
+    SPDtracklet_t& trlet = fTracklets[itr];
+    float zspd2 = fLayers[kALrSPD2]->GetClusterInfo(trlet.id2)->z;
+    if (zspd2<fZSPD2CutMin || zspd2>fZSPD2CutMax) continue;
     ITStrack_t &track = fTracks[fNTracks];
-    if (!CreateTrack(track, fTracklets[itr])) continue;
+    if (!CreateTrack(track, trlet)) continue;
+    track.trackletID = itr;
     Bool_t res;
-    for (int lrID=kLrShield1;lrID<kMaxLrITS;lrID++) if (!(res=FollowToLayer(track,lrID))) break;
+    for (int lrID=kLrShield1;lrID<kMaxLrITS;lrID++) {
+      res = FollowToLayer(track,lrID) && IsAcceptableTrack(track);
+      if (!res) break;
+    }
     if (!res) continue;
     CookLabel(track);
-    printf("Track %d for tracklet %d\n",fNTracks,itr); PrintTrack(track);
     fNTracks++;
     //
   }  
 }
 
 //______________________________________________
-void AliXXXITSTracker::PrintTrack(AliXXXITSTracker::ITStrack_t& track)
+Bool_t AliXXXITSTracker::IsAcceptableTrack(const AliXXXITSTracker::ITStrack_t& track) const
+{
+  // check if the track is acceptable
+  return kTRUE;
+}
+
+//______________________________________________
+void AliXXXITSTracker::PrintTrack(const AliXXXITSTracker::ITStrack_t& track) const
 {
   // print track info
-  printf("Chi2 = %f for %d clusters\n",track.chi2,track.ncl);
+  printf("Chi2 = %f for %d clusters. Tracklet %d\n",track.chi2,track.ncl,track.trackletID);
   for (int ilr=0;ilr<kNLrActive;ilr++) {
     if (track.clID[ilr]<0) continue;
     AliITSRecPoint* cl = fLayers[ilr]->GetClusterSorted(track.clID[ilr]);
@@ -305,12 +367,13 @@ void AliXXXITSTracker::PrintTracklets() const
 {
   // print traklets info
   int ntr = fTracklets.size();
+  printf("NTracklets: %d\n",ntr);
   printf("Nspd1: %4d Nspd2: %4d, Ntracklets: %d\n",fNClusters[0],fNClusters[1],ntr);
   for (int itr=0;itr<ntr;itr++) {
     const SPDtracklet_t* trk = &fTracklets[itr];
-    AliITSRecPoint* cl1 = fLayers[0]->GetClusterSorted(trk->id1);
-    AliITSRecPoint* cl2 = fLayers[1]->GetClusterSorted(trk->id2);
-    AliXXXLayer::ClsInfo_t* cli0 = fLayers[0]->GetClusterInfo(trk->id1);
+    AliITSRecPoint* cl1 = fLayers[kALrSPD1]->GetClusterSorted(trk->id1);
+    AliITSRecPoint* cl2 = fLayers[kALrSPD2]->GetClusterSorted(trk->id2);
+    AliXXXLayer::ClsInfo_t* cli0 = fLayers[kALrSPD1]->GetClusterInfo(trk->id1);
     printf("#%3d Phi:%+.3f Tht:%+.3f Dphi:%+.3f Dtht:%+.3f Chi2:%.3f | Lbl:",
 	   itr,cli0->phi,TMath::ATan2(cli0->r,cli0->z-fSPDVertex->GetZ()), trk->dphi,trk->dtht,trk->chi2);
     int lb = 0;
@@ -321,36 +384,39 @@ void AliXXXITSTracker::PrintTracklets() const
 }
 
 //______________________________________________
+void AliXXXITSTracker::PrintTracks() const
+{
+  // print tracks info
+  printf("NTracks: %d\n",fNTracks);
+  for (int itr=0;itr<fNTracks;itr++) PrintTrack(fTracks[itr]);
+  //
+}
+
+
+//______________________________________________
 void AliXXXITSTracker::CalcAuxTracking()
 {
   // precalculate auxilarry variables for tracking
   //
   // largest track curvature to search
+  const double ztolerEdge = 1.0;
   fCurvMax = TMath::Abs(fBz*kB2C/fMinPt);
-  //
-  for (int ilr=0;ilr<kMaxLrITS;ilr++) {
-    double sgms2 = 0.014*0.014*fgkX2X0ITS[ilr];
-    for (int jlr=ilr+1;jlr<kMaxLrITS;jlr++) {
-      int jlA = GetActiveLayerID(jlr);
-      if (jlA<0) continue;
-      double dr = fgkRLayITS[jlr] - fgkRLayITS[ilr];
-      fMSDist[jlA] += sgms2*dr*dr;  // expected position uncertainty squared for 1 GeV particle
-    }
+  double thMin =-1e9;
+  double thMax = 1e9;
+  for (int ilA=kNLrActive-1;ilA>kALrSPD2;ilA--) {
+    if (!IsObligatoryLayer(ilA)) continue;
+    int ilr=fgkActiveLrITS[ilA];
+    double r   = fgkRLayITS[ilr] - fgkRSpanITS[ilr];
+    double dz = fgkZSpanITS[ilr]+ztolerEdge+fDThetaTrackletSc*r;
+    double ri  = 1./r;
+    double tmin= (-dz-fSPDVertex->GetZ())*ri;
+    double tmax= ( dz-fSPDVertex->GetZ())*ri;
+    if (tmin>thMin) thMin = tmin;
+    if (tmax<thMax) thMax = tmax;
   }
-  //
-  for (int ila=0;ila<kNLrActive;ila++) {
-    fMSDist[ila] = fMSDist[ila]>0 ? TMath::Sqrt(fMSDist[ila]) : 0; // tolerance in coordinate
-    fMSPhi[ila]  = fMSDist[ila]/fgkRLayITS[ila]; // tolerance in az. angle
-    //
-    fTolPhiCrude[ila] = TMath::ASin(0.5*fgkRLayITS[ila]*fCurvMax)  // max deflection in phi
-      + 0.5*fCurvMax*fgkRSpanITS[ila]            // account for the spread in cluster R
-      + fMSPhi[ila]/fMinPt;                      // MS contribution
-    //
-    // contribution to deviation from straight line
-    fTolZCrude[ila] = TMath::Abs(2*TMath::ASin(0.5*fgkRLayITS[ila]*fCurvMax)-fgkRLayITS[ila])  // arc vs segment
-      + fMSDist[ila]/fMinPt;                      // MS contribution
-    
-  }
+  double r = fgkRLayITS[kLrSPD2] + fgkRSpanITS[kLrSPD2];
+  fZSPD2CutMin = fSPDVertex->GetZ()+thMin*r; // min Z of SPD2 in tracklet to consider tracking
+  fZSPD2CutMax = fSPDVertex->GetZ()+thMax*r; // max Z of SPD2 in tracklet to consider tracking
   //
 }
 
@@ -359,29 +425,29 @@ Bool_t AliXXXITSTracker::CreateTrack(AliXXXITSTracker::ITStrack_t& track,
 				     AliXXXITSTracker::SPDtracklet_t& trlet)
 {
   // create track seed from tracklet
-  double zv = fSPDVertex->GetZ();
   // init track
-  AliXXXLayer::ClsInfo_t *cli1=fLayers[0]->GetClusterInfo(trlet.id1);
-  AliXXXLayer::ClsInfo_t *cli2=fLayers[1]->GetClusterInfo(trlet.id2);
-  AliITSRecPoint *cl1=fLayers[0]->GetClusterUnSorted(cli1->index);
-  AliITSRecPoint *cl2=fLayers[1]->GetClusterUnSorted(cli2->index);
-  int det1 = cl1->GetVolumeId()-fLayers[0]->GetVIDOffset();
-  int det2 = cl2->GetVolumeId()-fLayers[1]->GetVIDOffset();
-  AliXXXLayer::ITSDetInfo_t& detInfo1 = fLayers[0]->GetDetInfo(det1);
-  AliXXXLayer::ITSDetInfo_t& detInfo2 = fLayers[1]->GetDetInfo(det2);
+  AliXXXLayer::ClsInfo_t *cli1=fLayers[kALrSPD1]->GetClusterInfo(trlet.id1);
+  AliXXXLayer::ClsInfo_t *cli2=fLayers[kALrSPD2]->GetClusterInfo(trlet.id2);
+  AliITSRecPoint *cl1=fLayers[kALrSPD1]->GetClusterUnSorted(cli1->index);
+  AliITSRecPoint *cl2=fLayers[kALrSPD2]->GetClusterUnSorted(cli2->index);
+  int det1 = cl1->GetVolumeId()-fLayers[kALrSPD1]->GetVIDOffset();
+  int det2 = cl2->GetVolumeId()-fLayers[kALrSPD2]->GetVIDOffset();
+  AliXXXLayer::ITSDetInfo_t& detInfo1 = fLayers[kALrSPD1]->GetDetInfo(det1);
+  AliXXXLayer::ITSDetInfo_t& detInfo2 = fLayers[kALrSPD2]->GetDetInfo(det2);
   //
   // crude momentun estimate
-  double dx=cli1->x-cli2->x,dy=cli1->y-cli2->y,d=TMath::Sqrt(dx*dx+dy*dy);
-  double qptInv = fBz ? 2*TMath::Sin(cli2->phi-cli1->phi)/d/fBz/kB2C : 0; // positive particle goes anticlockwise in B+
+  float dx=cli1->x-cli2->x,dy=cli1->y-cli2->y,d=TMath::Sqrt(dx*dx+dy*dy);
+  float qptInv = fBz ? 2*TMath::Sin(cli2->phi-cli1->phi)/d/fBz/kB2C : 0; // positive particle goes anticlockwise in B+
   //
   // we initialize the seed in the tracking frame of 1st detector
   float xv= fSPDVertex->GetX()*detInfo1.cosTF + fSPDVertex->GetY()*detInfo1.sinTF;
   float yv=-fSPDVertex->GetX()*detInfo1.sinTF + fSPDVertex->GetY()*detInfo1.cosTF;
-  float par[5] = {yv, zv, TMath::Sin(cli1->phi-detInfo1.phiTF), (cli1->z-zv)/cli1->r, qptInv};
-  Double_t covVtx[6]; 
+  float zv= fSPDVertex->GetZ();
+  float par[5] = {yv, zv, (float)TMath::Sin(cli1->phi-detInfo1.phiTF), (cli1->z-zv)/cli1->r, qptInv};
+  double covVtx[6]; 
   fSPDVertex->GetCovarianceMatrix(covVtx);
-  float cov[15] = {covVtx[0]+covVtx[2],
-		   0, covVtx[5],
+  float cov[15] = {float(covVtx[0]+covVtx[2]),
+		   0, float(covVtx[5]),
 		   0,0,1,
 		   0,0,0,1,
 		   0,0,0,0,100*100};
@@ -542,4 +608,13 @@ Double_t AliXXXITSTracker::GetXatLabRLin(AliExternalTrackParam& track, double r)
   det = TMath::Sqrt(det);
   return x+(det-t0)*cs2;
   //
+ }
+ 
+#ifdef _TIMING_
+//______________________________________________
+void AliXXXITSTracker::PrintTiming()
+{
+  // print timing info
+  for (int i=0;i<kNSW;i++) {printf("%s\t",fgkSWNames[i]); fSW[i].Print();}
 }
+#endif

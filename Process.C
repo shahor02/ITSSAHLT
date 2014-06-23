@@ -43,8 +43,6 @@ TTree* treeInp = 0;
 AliRunLoader* runLoader = 0;
 AliESDEvent* esd=0;
 
-TStopwatch swTot,swTracklets,swTracks;
-
 void ProcessEvent(int iev);
 void Process(const char* path);
 void ProcChunk(const char* path);
@@ -54,9 +52,6 @@ void LoadClusters(TTree* tRP);
 void Process(const char* inpData)
 {
   //
-  swTot.Stop();
-  swTracklets.Stop();
-  swTracks.Stop();
   AliCDBManager* man = AliCDBManager::Instance();
   man->SetDefaultStorage("local://$ALICE_ROOT/OCDB");
   man->SetRun(0);
@@ -84,12 +79,6 @@ void Process(const char* inpData)
       inpDtStr.ReadLine(inpf);
     }
   }
-  swTot.Stop();
-  swTracklets.Stop();
-  swTracks.Stop();
-  printf("Total:       "); swTot.Print();
-  printf("Trackleting: "); swTracklets.Print();
-  printf("Tracking   : "); swTracks.Print();
 
 }
 
@@ -115,6 +104,7 @@ void ProcChunk(const char* path)
   gAlice = runLoader->GetAliRun();
   runLoader->LoadHeader();
   runLoader->LoadKinematics();
+  runLoader->LoadRecPoints("ITS");
   // ESD
   TFile* esdFile = TFile::Open(Form("%sAliESDs.root",dir.Data()));
   if (!esdFile || !esdFile->IsOpen()) {
@@ -136,8 +126,8 @@ void ProcChunk(const char* path)
   }
   esd->ReadFromTree(treeInp);
   //
-  //  for(Int_t iEv=0; iEv<runLoader->GetNumberOfEvents(); iEv++){
-  for(Int_t iEv=7; iEv<8; iEv++){
+  //for(Int_t iEv=0; iEv<runLoader->GetNumberOfEvents(); iEv++){
+    for(Int_t iEv=3; iEv<=3; iEv++){
     printf("ev %d\n",iEv);
     ProcessEvent(iEv);
   }
@@ -163,7 +153,7 @@ void ProcessEvent(int iEv)
   const AliESDVertex* vtx = esd->GetPrimaryVertexSPD();
   if (!vtx || !vtx->GetStatus()) return;
   //
-  TTree* treeITSRP = runLoader->GetTreeR("ITS",kTRUE);
+  TTree* treeITSRP = runLoader->GetTreeR("ITS",kFALSE);
   if (!treeITSRP) {
     printf("Failed to fetch ITS recpoints\n");
     exit(1);
@@ -178,20 +168,14 @@ void ProcessEvent(int iEv)
 //_________________________________________________
 void TestTracker(TTree* tRP, const AliESDVertex* vtx)
 {
-  swTot.Start(0);
   tracker->Clear(); 
   LoadClusters(tRP); 
   tracker->SetSPDVertex(vtx);
-  
-  swTracklets.Start(0);
-  tracker->FindTracklets();
-  swTracklets.Stop();
-  swTot.Stop();
-  tracker->PrintTracklets();
-  //
-  swTracks.Start(0);
+  tracker->SetBz(esd->GetMagneticField());
+  tracker->ProcessEvent();
   tracker->Tracklets2Tracks();
-  swTracks.Stop();
+  tracker->PrintTracklets();
+  tracker->PrintTracks();  
   //
   vtx->Print();
   esd->GetMultiplicity()->Print("t");

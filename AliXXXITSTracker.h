@@ -2,9 +2,14 @@
 #define ALIXXXITSTRACKER_H
 
 #include <TBits.h>
+#include <TStopwatch.h>
 #include <algorithm>
 #include <vector>
 #include "AliExternalTrackParam.h"
+
+//------- compilation options, comment out all for best performance ------
+#define _TIMING_                            // print timing info
+//------------------------------------------------------------------------
 
 class AliITSRecPoint;
 class AliESDVertex;
@@ -13,8 +18,9 @@ class AliXXXLayer;
 class AliXXXITSTracker : public TObject
 {
  public:
+  enum {kALrSPD1,kALrSPD2, kALrSDD1,kALrSDD2, kALrSSD1,kALrSSD2,kNLrActive};
   enum {kLrBeamPime, kLrSPD1,kLrSPD2, kLrShield1, kLrSDD1,kLrSDD2, kLrShield2, kLrSSD1,kLrSSD2,
-	kMaxLrITS,kNLrActive=6,kNLrPassive=kMaxLrITS-kNLrActive};
+	kMaxLrITS,kNLrPassive=kMaxLrITS-kNLrActive};
   //
   struct SPDtracklet {
     int id1;
@@ -31,12 +37,14 @@ class AliXXXITSTracker : public TObject
     int clID[6];
     int ncl;
     int label;
+    int trackletID;
   };
   typedef struct ITStrack ITStrack_t;
   //
   AliXXXITSTracker();
   virtual ~AliXXXITSTracker();
   //
+  void ProcessEvent();
   void Init();
   void Clear(Option_t *opt="");
   void ClearTracklets();
@@ -44,6 +52,7 @@ class AliXXXITSTracker : public TObject
   //
   void SetSPDVertex(const AliESDVertex* v)         {fSPDVertex = v;}
   void AddCluster(AliITSRecPoint* cl);
+  void SetBz(float v)                              {fBz = v;}
   //
   // methods for trackleting ---------------->>>
   Bool_t FindTracklets();
@@ -73,9 +82,15 @@ class AliXXXITSTracker : public TObject
   Bool_t  FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_t lrID);
   Double_t GetXatLabRLin(AliExternalTrackParam& track, double r);
   void    CookLabel(AliXXXITSTracker::ITStrack_t track);
-  void    PrintTrack(AliXXXITSTracker::ITStrack_t& track);
+  void    PrintTrack(const AliXXXITSTracker::ITStrack_t& track) const;
+  Bool_t  IsObligatoryLayer(int lr)    const        {return !fSkipLayer[lr];}
+  Bool_t  IsAcceptableTrack(const AliXXXITSTracker::ITStrack_t& track) const;
+  void    PrintTracks()                const;
   // methods for track reconstruction -------<<<
   //
+#ifdef _TIMING_
+  void PrintTiming();
+#endif
  protected:
   //
   AliXXXLayer* fLayers[kNLrActive];
@@ -105,6 +120,8 @@ class AliXXXITSTracker : public TObject
   // for track reconstruction ------------ >>>
   Float_t  fMinPt;                                //! user pt cutoff
   Float_t  fCurvMax;                              //! max curvature to reconstruct
+  Float_t  fZSPD2CutMin;                          //! min Z of tracklet SPD2 to consider tracking
+  Float_t  fZSPD2CutMax;                          //! max Z of tracklet SPD2 to consider tracking
   Float_t  fMaxChi2Tr2Cl;                         //! cut on cluster-to-track chi2
   Float_t  fChi2TotCut[kNLrActive];               //! cut on total chi2 depending on track length
   //
@@ -134,6 +151,15 @@ class AliXXXITSTracker : public TObject
   static const Int_t   fgkLrDefBins[kNLrActive][2]; // default binning for cluster navigator
   static const Int_t   fgkDummyLabel;               // dummy MC label
   static const Float_t fgkDefMass;                  // default mass for tracking
+  //
+#ifdef _TIMING_
+ public:
+  enum {kSWTotal,kSWTracklets,kSWTracks,kSWVertex,kNSW};
+ protected:
+  static const char* fgkSWNames[kNSW];
+  TStopwatch fSW[kNSW];
+#endif
+  //
   ClassDef(AliXXXITSTracker,0)
 };
 
