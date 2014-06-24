@@ -36,6 +36,13 @@ const Float_t AliXXXITSTracker::fgkX2X0ITS[AliXXXITSTracker::kMaxLrITS] = {
   0.5e-2, 1.e-2,1.e-2,  1.e-2,  1.e-2,1.e-2,  1.e-2,  1.e-2,1e-2};
 
 
+const Double_t AliXXXITSTracker::fgkClSystYErr2[AliXXXITSTracker::kNLrActive] = 
+  {0.0010*0.0010, 0.0030*0.0030, 0.0500*0.0500, 0.0500*0.0500, 0.0020*0.0020, 0.0020*0.0020};
+
+const Double_t AliXXXITSTracker::fgkClSystZErr2[AliXXXITSTracker::kNLrActive] = 
+  {0.0050*0.0050, 0.0050*0.0050, 0.0050*0.0050, 0.0050*0.0050, 0.1000*0.1000, 0.1000*0.1000};
+
+
 const Int_t    AliXXXITSTracker::fgkLrDefBins[AliXXXITSTracker::kNLrActive][2] = // n bins in z, phi
   { {20,20}, {20,20}, {20,20}, {20,20}, {20,20}, {20,20} };
 
@@ -100,9 +107,9 @@ void AliXXXITSTracker::Init()
     int iAct = fgkActiveLrITS[i];
     fLayers[i] = new AliXXXLayer(i,fgkZSpanITS[iAct]+1,fgkLrDefBins[i][0],fgkLrDefBins[i][1]);
     fSkipLayer[i] = kFALSE;
-    fNSigma2[i] = 4*4;
-    fYToler2[i] = 0.1*0.1;
-    fZToler2[i] = 0.1*0.1;
+    fNSigma2[i] = 5*5;
+    fYToler2[i] = 10;//0.2*0.2;
+    fZToler2[i] = 10;//0.2*0.2;
     fChi2TotCut[i] = 0;
   }  
   fChi2TotCut[1] = 10; // 2 cl+vtx -> NDF=1
@@ -324,12 +331,18 @@ void AliXXXITSTracker::Tracklets2Tracks()
   //
   for (int itr=0;itr<nTrk;itr++) {
     SPDtracklet_t& trlet = fTracklets[itr];
+    //
+    printf("TestTr %d\t|",itr);
+    int stat = GetTrackletMCTruth(trlet);
+    for (int i=0;i<kNLrActive;i++) printf("%c", (stat&(0x1<<i)) ? '*':'-'); printf("|\n");
+    //
     float zspd2 = fLayers[kALrSPD2]->GetClusterInfo(trlet.id2)->z;
     if (zspd2<fZSPD2CutMin || zspd2>fZSPD2CutMax) continue;
     ITStrack_t &track = fTracks[fNTracks];
     if (!CreateTrack(track, trlet)) continue;
     track.trackletID = itr;
     Bool_t res;
+    printf("process tracklet pt:%f\n",track.param.Pt());
     for (int lrID=kLrShield1;lrID<kMaxLrITS;lrID++) {
       res = FollowToLayer(track,lrID) && IsAcceptableTrack(track);
       if (!res) break;
@@ -374,8 +387,10 @@ void AliXXXITSTracker::PrintTracklets() const
     AliITSRecPoint* cl1 = fLayers[kALrSPD1]->GetClusterSorted(trk->id1);
     AliITSRecPoint* cl2 = fLayers[kALrSPD2]->GetClusterSorted(trk->id2);
     AliXXXLayer::ClsInfo_t* cli0 = fLayers[kALrSPD1]->GetClusterInfo(trk->id1);
-    printf("#%3d Phi:%+.3f Tht:%+.3f Dphi:%+.3f Dtht:%+.3f Chi2:%.3f | Lbl:",
-	   itr,cli0->phi,TMath::ATan2(cli0->r,cli0->z-fSPDVertex->GetZ()), trk->dphi,trk->dtht,trk->chi2);
+    printf("#%3d Phi:%+.3f Eta:%+.3f Dphi:%+.3f Dtht:%+.3f Chi2:%.3f | Lbl:",
+	   itr,cli0->phi,
+	   -TMath::Log(TMath::Tan(TMath::ATan2(cli0->r,cli0->z-fSPDVertex->GetZ())/2.)),
+	   trk->dphi,trk->dtht,trk->chi2);
     int lb = 0;
     for (int i=0;i<3;i++) if ( (lb=cl1->GetLabel(i))>=0 ) printf(" %5d",lb); printf("|");
     for (int i=0;i<3;i++) if ( (lb=cl2->GetLabel(i))>=0 ) printf(" %5d",lb); 
@@ -457,7 +472,7 @@ Bool_t AliXXXITSTracker::CreateTrack(AliXXXITSTracker::ITStrack_t& track,
   // go to 1st layer, ignoring the MS (errors are anyway not defined)
   if (!param.PropagateTo(detInfo1.xTF+cl1->GetX(), fBz)) return kFALSE;
   Double_t cpar0[2]={ cl1->GetY(), cl1->GetZ()};
-  Double_t ccov0[3]={ cl1->GetSigmaY2(), 0., cl1->GetSigmaZ2()};
+  Double_t ccov0[3]={ cl1->GetSigmaY2() + GetClSystYErr2(kALrSPD1), 0., cl1->GetSigmaZ2() + GetClSystZErr2(kALrSPD1)};
   if (!param.Update(cpar0,ccov0)) return kFALSE;
   if (!param.CorrectForMeanMaterial( fgkX2X0ITS[kLrSPD1], fgkRhoLITS[kLrSPD1], 
 					   fgkDefMass)) return kFALSE;
@@ -465,7 +480,7 @@ Bool_t AliXXXITSTracker::CreateTrack(AliXXXITSTracker::ITStrack_t& track,
   if (!param.Rotate(detInfo2.phiTF)) return kFALSE;
   if (!param.PropagateTo(detInfo2.xTF+cl2->GetX(), fBz)) return kFALSE;
   Double_t cpar1[2]={ cl2->GetY(), cl2->GetZ()};
-  Double_t ccov1[3]={ cl2->GetSigmaY2(), 0., cl2->GetSigmaZ2()};
+  Double_t ccov1[3]={ cl2->GetSigmaY2() + GetClSystYErr2(kALrSPD2), 0., cl2->GetSigmaZ2() + GetClSystZErr2(kALrSPD2)};
   track.chi2 += param.GetPredictedChi2(cpar1,ccov1);
   if (!param.Update(cpar1,ccov1)) return kFALSE;
   //
@@ -528,8 +543,9 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
     trCopy = track.param;
     if (!trCopy.Propagate(detInfo.phiTF, detInfo.xTF+cl->GetX(), fBz)) continue;
     double cpar[2]={ cl->GetY(), cl->GetZ()};
-    double ccov[3]={ cl->GetSigmaY2(), 0., cl->GetSigmaZ2()}; // RS: add syst errors    
+    double ccov[3]={ cl->GetSigmaY2() + GetClSystYErr2(lrIDA) , 0., cl->GetSigmaZ2() + GetClSystZErr2(lrIDA)};
     double chi2cl = trCopy.GetPredictedChi2(cpar,ccov);
+    printf("Lr%d -> %f\n",lrIDA,chi2cl);
     if (chi2cl>fMaxChi2Tr2Cl) continue;
     //    SaveCandidate(lrIDA,trCopy,chi2cl,icl);  // RS: do we need this?
     if (chi2cl>chi2Best) continue;
@@ -608,7 +624,43 @@ Double_t AliXXXITSTracker::GetXatLabRLin(AliExternalTrackParam& track, double r)
   det = TMath::Sqrt(det);
   return x+(det-t0)*cs2;
   //
- }
+}
+
+//______________________________________________
+Int_t AliXXXITSTracker::GetTrackletMCTruth(AliXXXITSTracker::SPDtracklet_t& trlet) const
+{
+  int status = 0;
+  AliXXXLayer::ClsInfo_t *cli1=fLayers[kALrSPD1]->GetClusterInfo(trlet.id1);
+  AliXXXLayer::ClsInfo_t *cli2=fLayers[kALrSPD2]->GetClusterInfo(trlet.id2);
+  AliITSRecPoint *cl1=fLayers[kALrSPD1]->GetClusterUnSorted(cli1->index);
+  AliITSRecPoint *cl2=fLayers[kALrSPD2]->GetClusterUnSorted(cli2->index);
+  //
+  int lab = -1;
+  //
+  for (int i=0;i<3;i++) {
+    int lb1 = cl1->GetLabel(i); 
+    if (lb1<0) continue;
+    for (int j=0;j<3;j++) {
+      int lb2 = cl2->GetLabel(i); 
+      if (lb2<0) break;
+      if (lb1==lb2) {lab = lb1; break;}
+    }
+    if (lab>=0) break;
+  }
+  if (lab<0) return 0;
+  //
+  for (int ila=kALrSDD1;ila<kNLrActive;ila++) {
+    for (int icl=fNClusters[ila];icl--;) {
+      AliITSRecPoint *cl=fLayers[ila]->GetClusterUnSorted(icl);
+      for (int i=0;i<3;i++) {
+	if (cl->GetLabel(i)<0) break;
+	if (cl->GetLabel(i)==lab) {status |= 0x1<<ila; break;}
+      }
+      if (status & (0x1<<ila)) break;
+    }
+  }
+  return status;
+}
  
 #ifdef _TIMING_
 //______________________________________________

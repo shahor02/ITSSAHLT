@@ -171,7 +171,7 @@ void AliXXXLayer::SortClusters(const AliVertex* vtx)
     }
     fBins[currBin].ncl++;
   }
-  //  Print("clb"); //RS
+  Print("clb"); //RS
 }
 
 //_________________________________________________________________

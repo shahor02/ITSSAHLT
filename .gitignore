@@ -4,6 +4,14 @@
 *.o
 *.obj
 
+# Aux, backup files
+*.d
+*.*~
+
+# Log files
+*.log
+
+
 # Compiled Dynamic libraries
 *.so
 *.dylib
@@ -19,3 +27,7 @@
 *.exe
 *.out
 *.app
+
+# root files
+*.root
+

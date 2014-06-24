@@ -65,6 +65,9 @@ class AliXXXITSTracker : public TObject
   void SetSigPhiTracklet(float v=0.08)              {fSigPhiTracklet = v;}
   void SetChi2CutTracklet(float v=1.5)              {fChi2CutTracklet = v;}
   //
+  Double_t GetClSystYErr2(Int_t lr)    const        {return fgkClSystYErr2[lr];}
+  Double_t GetClSystZErr2(Int_t lr)    const        {return fgkClSystZErr2[lr];}
+  //
   int  GetNTracklets()                 const        {return (int)fTracklets.size();}
   void PrintTracklets() const;
   // methods for trackleting ----------------<<<
@@ -86,6 +89,7 @@ class AliXXXITSTracker : public TObject
   Bool_t  IsObligatoryLayer(int lr)    const        {return !fSkipLayer[lr];}
   Bool_t  IsAcceptableTrack(const AliXXXITSTracker::ITStrack_t& track) const;
   void    PrintTracks()                const;
+  Int_t   GetTrackletMCTruth(AliXXXITSTracker::SPDtracklet_t& trlet) const;
   // methods for track reconstruction -------<<<
   //
 #ifdef _TIMING_
@@ -147,6 +151,9 @@ class AliXXXITSTracker : public TObject
   static const Float_t fgkZSpanITS[kMaxLrITS];    // half Z span of the material layer
   static const Int_t   fgkPassivLrITS[kNLrPassive];  // list of passive layer enums
   static const Int_t   fgkActiveLrITS[kNLrActive]; // list of active layer enums
+  static const Double_t fgkClSystYErr2[kNLrActive]; // syst error^2 for Y direction
+  static const Double_t fgkClSystZErr2[kNLrActive]; // syst error^2 for Y direction
+
   static const Int_t   fgkLr2Active[kMaxLrITS]; // conversion from LrID to ActiveLr ID
   static const Int_t   fgkLrDefBins[kNLrActive][2]; // default binning for cluster navigator
   static const Int_t   fgkDummyLabel;               // dummy MC label
