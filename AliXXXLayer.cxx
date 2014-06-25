@@ -171,7 +171,7 @@ void AliXXXLayer::SortClusters(const AliVertex* vtx)
     }
     fBins[currBin].ncl++;
   }
-  Print("clb"); //RS
+  //  Print("clb"); //RS
 }
 
 //_________________________________________________________________
@@ -237,8 +237,8 @@ int AliXXXLayer::SelectClusters(float zmin,float zmax,float phimin,float phimax)
 
   fQueryZBmin = GetZBin(zmin);
   if (fQueryZBmin<0) fQueryZBmin = 0;
-  if (fQueryZBmax>=fNZBins) fQueryZBmax = fNZBins-1;
   fQueryZBmax = GetZBin(zmax);
+  if (fQueryZBmax>=fNZBins) fQueryZBmax = fNZBins-1;
   BringTo02Pi(phimin);
   BringTo02Pi(phimax);
   fQueryPhiBmin = GetPhiBin(phimin);

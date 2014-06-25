@@ -34,8 +34,9 @@ class AliXXXITSTracker : public TObject
   struct ITStrack {
     AliExternalTrackParam param;
     float chi2;
+    short ncl;
+    short nmiss;
     int clID[6];
-    int ncl;
     int label;
     int trackletID;
   };
@@ -137,8 +138,11 @@ class AliXXXITSTracker : public TObject
   Float_t  fMSPhi[kNLrActive];                    //! dphi due to the MS for 1 GeV particle
   Float_t  fTolPhiCrude[kNLrActive];              //! tolerance in dphi for particle of unknown momentum
   Float_t  fTolZCrude[kNLrActive];                //! tolerance in Z for particle of unknown momentum
+  Float_t fMissChi2Penalty;                          //! penalize missed clusters
+  Int_t     fMaxMissedLayers;                        //! allow to miss at most this number of layers
+  Int_t     fNTracks;                                        //! n found tracks
   std::vector<ITStrack_t> fTracks;                //! found tracks container
-  Int_t    fNTracks;                              //! n found tracks
+
   // for track reconstruction ------------ <<<
   //		      
 		      

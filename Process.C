@@ -126,8 +126,8 @@ void ProcChunk(const char* path)
   }
   esd->ReadFromTree(treeInp);
   //
-  //for(Int_t iEv=0; iEv<runLoader->GetNumberOfEvents(); iEv++){
-    for(Int_t iEv=3; iEv<=3; iEv++){
+  for(Int_t iEv=0; iEv<runLoader->GetNumberOfEvents(); iEv++){
+    //for(Int_t iEv=99; iEv<=99; iEv++){
     printf("ev %d\n",iEv);
     ProcessEvent(iEv);
   }
@@ -173,7 +173,6 @@ void TestTracker(TTree* tRP, const AliESDVertex* vtx)
   tracker->SetSPDVertex(vtx);
   tracker->SetBz(esd->GetMagneticField());
   tracker->ProcessEvent();
-  tracker->Tracklets2Tracks();
   tracker->PrintTracklets();
   tracker->PrintTracks();  
   //

@@ -80,6 +80,10 @@ AliXXXITSTracker::AliXXXITSTracker() :
   ,fZSPD2CutMax(-1e9)
   ,fMaxChi2Tr2Cl(35)
   //
+  ,fMissChi2Penalty(3)
+  ,fMaxMissedLayers(1)
+  ,fNTracks(0)
+  //
   ,fSPDVertex(0)
 {
   // def. c-tor
@@ -117,7 +121,10 @@ void AliXXXITSTracker::Init()
   fChi2TotCut[3] = 20; 
   fChi2TotCut[4] = 24; 
   fChi2TotCut[5] = 26; 
-
+  //
+  fMissChi2Penalty = 3;
+  fMaxMissedLayers = 1;
+  //
   // auxialary precalculated variables
   if (fChi2CutTracklet<0.1) fChi2CutTracklet = 0.1;
   double scl = TMath::Sqrt(fChi2CutTracklet);
@@ -488,6 +495,7 @@ Bool_t AliXXXITSTracker::CreateTrack(AliXXXITSTracker::ITStrack_t& track,
   track.clID[1] = trlet.id2;
   track.clID[2] = track.clID[3] = track.clID[4] = track.clID[5] = -1;
   track.ncl = 2;
+  track.nmiss=0;
   track.label = fgkDummyLabel;
   return kTRUE;
 }
@@ -545,7 +553,6 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
     double cpar[2]={ cl->GetY(), cl->GetZ()};
     double ccov[3]={ cl->GetSigmaY2() + GetClSystYErr2(lrIDA) , 0., cl->GetSigmaZ2() + GetClSystZErr2(lrIDA)};
     double chi2cl = trCopy.GetPredictedChi2(cpar,ccov);
-    printf("Lr%d -> %f\n",lrIDA,chi2cl);
     if (chi2cl>fMaxChi2Tr2Cl) continue;
     //    SaveCandidate(lrIDA,trCopy,chi2cl,icl);  // RS: do we need this?
     if (chi2cl>chi2Best) continue;
@@ -558,18 +565,29 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
       updDone = kTRUE;
     }
   }
-  if (!bestCl) return kFALSE;
-  if (!updDone) {
-    double cpar[2]={ bestCl->GetY(), bestCl->GetZ()};
-    double ccov[3]={ bestCl->GetSigmaY2(), 0., bestCl->GetSigmaZ2()}; // RS: add syst errors    
-    if (!bestTr.Update(cpar,ccov)) return kFALSE;
+  printf("Lr%d -> %f\n",lrIDA,chi2Best);
+  if (bestCl) {
+    if (!updDone) {
+      double cpar[2]={ bestCl->GetY(), bestCl->GetZ()};
+      double ccov[3]={ bestCl->GetSigmaY2(), 0., bestCl->GetSigmaZ2()}; // RS: add syst errors    
+      if (!bestTr.Update(cpar,ccov)) return kFALSE;
+    }
+    track.ncl++;
+    track.chi2 += chi2Best;
   }
-  track.ncl++;
-  track.chi2 += chi2Best;
+  else {
+    if (++track.nmiss > fMaxMissedLayers)  return kFALSE;
+    track.chi2 += fMissChi2Penalty;
+  }
+  //
   if (track.chi2 > GetChi2TotCut(track.ncl+1)) return kFALSE;
-  track.param = bestTr;
-  track.clID[lrIDA] = iclBest;
-  return bestTr.CorrectForMeanMaterial(fgkX2X0ITS[lrID],fgkRhoLITS[lrID],fgkDefMass,kFALSE);
+  //
+  if (bestTr.CorrectForMeanMaterial(fgkX2X0ITS[lrID],fgkRhoLITS[lrID],fgkDefMass,kFALSE)) {
+    track.param = bestTr;
+    track.clID[lrIDA] = iclBest;
+    return kTRUE;
+  }
+  return kFALSE;
   //
 }
 
