@@ -21,6 +21,7 @@ class AliXXXITSTracker : public TObject
   enum {kALrSPD1,kALrSPD2, kALrSDD1,kALrSDD2, kALrSSD1,kALrSSD2,kNLrActive};
   enum {kLrBeamPime, kLrSPD1,kLrSPD2, kLrShield1, kLrSDD1,kLrSDD2, kLrShield2, kLrSSD1,kLrSSD2,
 	kMaxLrITS,kNLrPassive=kMaxLrITS-kNLrActive};
+  enum {kInvalidBit=BIT(14)};
   //
   struct SPDtracklet {
     int id1;
@@ -32,7 +33,8 @@ class AliXXXITSTracker : public TObject
   typedef struct SPDtracklet SPDtracklet_t;
   //
   struct ITStrack {
-    AliExternalTrackParam param;
+    AliExternalTrackParam paramOut;
+    AliExternalTrackParam paramInw;
     float chi2;
     short ncl;
     short nmiss;
@@ -82,7 +84,7 @@ class AliXXXITSTracker : public TObject
   AliXXXLayer* GetLayer(int i)         const        {return (AliXXXLayer*)fLayers[i];}
   Int_t   GetActiveLayerID(int i)      const        {return fgkLr2Active[i];}
   Float_t GetChi2TotCut(int ncl)       const;
-  Bool_t  CrossPassiveLayer(AliXXXITSTracker::ITStrack_t& track, Int_t lrID);
+  Bool_t  CrossPassiveLayer(AliExternalTrackParam& track, Int_t lrID);
   Bool_t  FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_t lrID);
   Double_t GetXatLabRLin(AliExternalTrackParam& track, double r);
   void    CookLabel(AliXXXITSTracker::ITStrack_t track);
@@ -91,6 +93,8 @@ class AliXXXITSTracker : public TObject
   Bool_t  IsAcceptableTrack(const AliXXXITSTracker::ITStrack_t& track) const;
   void    PrintTracks()                const;
   Int_t   GetTrackletMCTruth(AliXXXITSTracker::SPDtracklet_t& trlet) const;
+  void    RefitInward();
+  Bool_t  RefitInward(int itr);
   // methods for track reconstruction -------<<<
   //
 #ifdef _TIMING_

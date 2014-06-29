@@ -161,6 +161,7 @@ void AliXXXITSTracker::ProcessEvent()
 #endif
   //
   Tracklets2Tracks();
+  RefitInward();
   //
 #ifdef _TIMING_
   fSW[kSWTracks].Stop();
@@ -349,12 +350,13 @@ void AliXXXITSTracker::Tracklets2Tracks()
     if (!CreateTrack(track, trlet)) continue;
     track.trackletID = itr;
     Bool_t res;
-    printf("process tracklet pt:%f\n",track.param.Pt());
+    printf("process tracklet pt:%f\n",track.paramOut.Pt());
     for (int lrID=kLrShield1;lrID<kMaxLrITS;lrID++) {
       res = FollowToLayer(track,lrID) && IsAcceptableTrack(track);
       if (!res) break;
     }
     if (!res) continue;
+    track.paramOut.ResetBit(kInvalidBit); // flag that outward fit succeeded
     CookLabel(track);
     fNTracks++;
     //
@@ -379,7 +381,8 @@ void AliXXXITSTracker::PrintTrack(const AliXXXITSTracker::ITStrack_t& track) con
     printf("L%d #%4d ",ilr,track.clID[ilr]);
     for (int i=0;i<3;i++) printf("%d ",cl->GetLabel(i)); printf("\n");
   }
-  track.param.Print();
+  track.paramOut.Print();
+  track.paramInw.Print();  
 }
 
 //______________________________________________
@@ -473,7 +476,7 @@ Bool_t AliXXXITSTracker::CreateTrack(AliXXXITSTracker::ITStrack_t& track,
 		   0,0,1,
 		   0,0,0,1,
 		   0,0,0,0,100*100};
-  AliExternalTrackParam& param = track.param;
+  AliExternalTrackParam& param = track.paramOut;
   param.Set(xv, detInfo1.phiTF, par, cov);
   track.chi2 = 0;   // chi2 at 1st two point is 0
   // go to 1st layer, ignoring the MS (errors are anyway not defined)
@@ -481,8 +484,7 @@ Bool_t AliXXXITSTracker::CreateTrack(AliXXXITSTracker::ITStrack_t& track,
   Double_t cpar0[2]={ cl1->GetY(), cl1->GetZ()};
   Double_t ccov0[3]={ cl1->GetSigmaY2() + GetClSystYErr2(kALrSPD1), 0., cl1->GetSigmaZ2() + GetClSystZErr2(kALrSPD1)};
   if (!param.Update(cpar0,ccov0)) return kFALSE;
-  if (!param.CorrectForMeanMaterial( fgkX2X0ITS[kLrSPD1], fgkRhoLITS[kLrSPD1], 
-					   fgkDefMass)) return kFALSE;
+  if (!param.CorrectForMeanMaterial(fgkX2X0ITS[kLrSPD1],-fgkRhoLITS[kLrSPD1],fgkDefMass)) return kFALSE;
   // go to 2nd layer
   if (!param.Rotate(detInfo2.phiTF)) return kFALSE;
   if (!param.PropagateTo(detInfo2.xTF+cl2->GetX(), fBz)) return kFALSE;
@@ -497,22 +499,21 @@ Bool_t AliXXXITSTracker::CreateTrack(AliXXXITSTracker::ITStrack_t& track,
   track.ncl = 2;
   track.nmiss=0;
   track.label = fgkDummyLabel;
+  //
+  param.SetBit(kInvalidBit); // flag that track is not yer refitted outward 
+  track.paramOut.SetBit(kInvalidBit); // flag that track was not refitter inward
   return kTRUE;
 }
 
 //______________________________________________
-Bool_t AliXXXITSTracker::CrossPassiveLayer(AliXXXITSTracker::ITStrack_t& track, Int_t lrID)
+Bool_t AliXXXITSTracker::CrossPassiveLayer(AliExternalTrackParam& param, Int_t lrID)
 {
   // cross the layer, applying mat. corrections
-  AliExternalTrackParam& param = track.param;
   double xStart=param.GetX();
   double xToGo = GetXatLabRLin(param,fgkRLayITS[lrID]);
   if (xToGo<0 || !param.PropagateTo(xToGo,fBz)) return kFALSE;
   double x2x0=fgkX2X0ITS[lrID],xrho=fgkRhoLITS[lrID];
-  if (xStart>xToGo) { // inward propagation
-    x2x0 = -x2x0;
-    xrho = -xrho;
-  }
+  if (xStart<xToGo) xrho = -xrho; // inward propagation
   return param.CorrectForMeanMaterial(x2x0,xrho,fgkDefMass,kFALSE);
 //
 }
@@ -522,9 +523,9 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
 {
   // take track to given layer, searching hits if needed and applying mat. corrections
   int lrIDA = fgkLr2Active[lrID]; // active layer ID
-  if (lrIDA<0 || fSkipLayer[lrIDA]) return CrossPassiveLayer(track,lrID);
+  if (lrIDA<0 || fSkipLayer[lrIDA]) return CrossPassiveLayer(track.paramOut,lrID);
   //
-  AliExternalTrackParam trCopy(track.param);
+  AliExternalTrackParam trCopy(track.paramOut);
   double xToGo = GetXatLabRLin(trCopy,fgkRLayITS[lrID]); // aproximate X at lrID
   if (!trCopy.PropagateTo(xToGo,fBz)) return kFALSE;
   double xyz[3];
@@ -548,7 +549,7 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
     AliITSRecPoint *cl=lrA->GetClusterUnSorted(cli->index);
     int detId = cl->GetVolumeId()-lrA->GetVIDOffset();
     AliXXXLayer::ITSDetInfo_t& detInfo = lrA->GetDetInfo(detId);
-    trCopy = track.param;
+    trCopy = track.paramOut;
     if (!trCopy.Propagate(detInfo.phiTF, detInfo.xTF+cl->GetX(), fBz)) continue;
     double cpar[2]={ cl->GetY(), cl->GetZ()};
     double ccov[3]={ cl->GetSigmaY2() + GetClSystYErr2(lrIDA) , 0., cl->GetSigmaZ2() + GetClSystZErr2(lrIDA)};
@@ -582,8 +583,8 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
   //
   if (track.chi2 > GetChi2TotCut(track.ncl+1)) return kFALSE;
   //
-  if (bestTr.CorrectForMeanMaterial(fgkX2X0ITS[lrID],fgkRhoLITS[lrID],fgkDefMass,kFALSE)) {
-    track.param = bestTr;
+  if (bestTr.CorrectForMeanMaterial(fgkX2X0ITS[lrID],-fgkRhoLITS[lrID],fgkDefMass,kFALSE)) {
+    track.paramOut = bestTr;
     track.clID[lrIDA] = iclBest;
     return kTRUE;
   }
@@ -679,6 +680,79 @@ Int_t AliXXXITSTracker::GetTrackletMCTruth(AliXXXITSTracker::SPDtracklet_t& trle
   }
   return status;
 }
+
+//______________________________________________
+Bool_t AliXXXITSTracker::RefitInward(int itr)
+{
+  // refit track inward with material correction
+  ITStrack_t &track = fTracks[itr];
+  AliExternalTrackParam &trout = track.paramOut;
+  if (trout.TestBit(kInvalidBit)) return kFALSE;
+  AliExternalTrackParam &trin  = track.paramInw;
+  trin = trout;
+  int ilA = kNLrActive;
+  for (;ilA--;) {                    // find outermost layer with cluster
+    if (track.clID[ilA]<0) continue;
+    break;
+  }
+  int ilStart = fgkActiveLrITS[ilA]; // corresponding total lr id 
+  AliXXXLayer* lrA = fLayers[ilA];
+  AliITSRecPoint *cl=lrA->GetClusterSorted(track.clID[ilA]);
+  AliXXXLayer::ITSDetInfo_t& detInfo = lrA->GetDetInfo(cl->GetVolumeId()-lrA->GetVIDOffset());
+  if (!trin.RotateParamOnly(detInfo.phiTF)) return kFALSE;
+  if (!trin.PropagateParamOnlyTo(detInfo.xTF+cl->GetX(), fBz)) return kFALSE;
+ // init with outer cluster y,z and slopes, q/pt of outward track
+  double par[5] = {cl->GetY(), cl->GetZ(), trin.GetSnp(), trin.GetTgl(), trin.GetSigned1Pt()}; 
+  double cov[15] = {cl->GetSigmaY2() + GetClSystYErr2(kALrSPD1), 
+		   0., cl->GetSigmaZ2() + GetClSystZErr2(kALrSPD1),
+		   0,0,1,
+		   0,0,0,1,
+		   0,0,0,0,100*100};
+  trin.Set(double(detInfo.xTF+cl->GetX()),double(detInfo.phiTF), par, cov);
+  // !!! no material correction is needed: errors are not defined yer
+  //
+  for (int ilr=ilStart;ilr--;) {
+    //
+    if ( (ilA=fgkLr2Active[ilr])<0 || track.clID[ilA]<0) { // either passive layer or no cluster
+      if (CrossPassiveLayer(trin,ilr)) continue;
+      else return kFALSE;
+    }
+    // there is a cluster, need to update
+    lrA = fLayers[ilA];
+    cl = lrA->GetClusterSorted(track.clID[ilA]);
+    detInfo = lrA->GetDetInfo(cl->GetVolumeId()-lrA->GetVIDOffset());
+    if (!trin.Propagate(detInfo.phiTF, detInfo.xTF+cl->GetX(), fBz)) return kFALSE;
+    double cpar[2]={ cl->GetY(), cl->GetZ()};
+    double ccov[3]={ cl->GetSigmaY2() + GetClSystYErr2(ilA) , 0., cl->GetSigmaZ2() + GetClSystZErr2(ilA)};
+    if (!trin.Update(cpar,ccov)) return kFALSE;
+    //
+    // correct for layer materials
+    if (!trin.CorrectForMeanMaterial(fgkX2X0ITS[ilr],fgkRhoLITS[ilr],fgkDefMass,kFALSE)) return kFALSE;
+    //
+  }
+  //
+  // now go to PCA to vertex
+  //double dca[2],dcaCov[3];
+  if (!trin.PropagateToDCA(fSPDVertex,fBz,fgkRLayITS[kLrBeamPime])) return kFALSE; //,dca,dcaCov);
+  //
+  trin.ResetBit(kInvalidBit); // flag that inward fit succeeded
+  return kTRUE;
+  //
+}
+
+//______________________________________________
+void AliXXXITSTracker::RefitInward()
+{
+  // refit tracks inward with material correction
+  for (int itr=fNTracks;itr--;) {
+    if (!RefitInward(itr)) {
+      printf("RefitInward failed for track %d\n",itr);
+      PrintTrack(fTracks[itr]);
+    }
+  }
+  //
+}
+
  
 #ifdef _TIMING_
 //______________________________________________
