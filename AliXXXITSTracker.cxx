@@ -30,10 +30,10 @@ const Int_t    AliXXXITSTracker::fgkLr2Active[AliXXXITSTracker::kMaxLrITS] = // 
   {-1, 0, 1, -1, 2, 3, -1, 4, 5};
 
 const Float_t AliXXXITSTracker::fgkRhoLITS[AliXXXITSTracker::kMaxLrITS] = {
-  1.48e-01, 2.48e-01,2.57e-01, 1.34e-01, 3.34e-01,3.50e-01, 2.22e-01, 2.38e-01,2.25e-01};
+  0.162802, 0.321960,0.354588, 0.274995, 0.193789,0.198168, 0.435372, 0.195828,0.226940};
 
 const Float_t AliXXXITSTracker::fgkX2X0ITS[AliXXXITSTracker::kMaxLrITS] = {
-  0.5e-2, 1.e-2,1.e-2,  1.e-2,  1.e-2,1.e-2,  1.e-2,  1.e-2,1e-2};
+  0.002757, 0.011660,0.012614, 0.006488, 0.007714,0.007916, 0.012689, 0.007849,0.009128};
 
 
 const Double_t AliXXXITSTracker::fgkClSystYErr2[AliXXXITSTracker::kNLrActive] = 
@@ -79,6 +79,8 @@ AliXXXITSTracker::AliXXXITSTracker() :
   ,fZSPD2CutMin(1e9)
   ,fZSPD2CutMax(-1e9)
   ,fMaxChi2Tr2Cl(35)
+  ,fAddErr2YspdVtx(0.02*0.02)
+  ,fAddErr2ZspdVtx(0.04*0.04)
   //
   ,fMissChi2Penalty(3)
   ,fMaxMissedLayers(1)
@@ -340,9 +342,11 @@ void AliXXXITSTracker::Tracklets2Tracks()
   for (int itr=0;itr<nTrk;itr++) {
     SPDtracklet_t& trlet = fTracklets[itr];
     //
-    printf("TestTr %d\t|",itr);
+    printf("TestTracklet %d\t|",itr);
     int stat = GetTrackletMCTruth(trlet);
     for (int i=0;i<kNLrActive;i++) printf("%c", (stat&(0x1<<i)) ? '*':'-'); printf("|\n");
+    //
+    PrintTracklet(itr);
     //
     float zspd2 = fLayers[kALrSPD2]->GetClusterInfo(trlet.id2)->z;
     if (zspd2<fZSPD2CutMin || zspd2>fZSPD2CutMax) continue;
@@ -350,11 +354,12 @@ void AliXXXITSTracker::Tracklets2Tracks()
     if (!CreateTrack(track, trlet)) continue;
     track.trackletID = itr;
     Bool_t res;
-    printf("process tracklet pt:%f\n",track.paramOut.Pt());
+    printf("process track pt:%f\n",track.paramOut.Pt());
     for (int lrID=kLrShield1;lrID<kMaxLrITS;lrID++) {
       res = FollowToLayer(track,lrID) && IsAcceptableTrack(track);
       if (!res) break;
     }
+    printf("%s\n",res ? "OK" : "Fail");
     if (!res) continue;
     track.paramOut.ResetBit(kInvalidBit); // flag that outward fit succeeded
     CookLabel(track);
@@ -392,21 +397,28 @@ void AliXXXITSTracker::PrintTracklets() const
   int ntr = fTracklets.size();
   printf("NTracklets: %d\n",ntr);
   printf("Nspd1: %4d Nspd2: %4d, Ntracklets: %d\n",fNClusters[0],fNClusters[1],ntr);
-  for (int itr=0;itr<ntr;itr++) {
-    const SPDtracklet_t* trk = &fTracklets[itr];
-    AliITSRecPoint* cl1 = fLayers[kALrSPD1]->GetClusterSorted(trk->id1);
-    AliITSRecPoint* cl2 = fLayers[kALrSPD2]->GetClusterSorted(trk->id2);
-    AliXXXLayer::ClsInfo_t* cli0 = fLayers[kALrSPD1]->GetClusterInfo(trk->id1);
-    printf("#%3d Phi:%+.3f Eta:%+.3f Dphi:%+.3f Dtht:%+.3f Chi2:%.3f | Lbl:",
-	   itr,cli0->phi,
-	   -TMath::Log(TMath::Tan(TMath::ATan2(cli0->r,cli0->z-fSPDVertex->GetZ())/2.)),
-	   trk->dphi,trk->dtht,trk->chi2);
-    int lb = 0;
-    for (int i=0;i<3;i++) if ( (lb=cl1->GetLabel(i))>=0 ) printf(" %5d",lb); printf("|");
-    for (int i=0;i<3;i++) if ( (lb=cl2->GetLabel(i))>=0 ) printf(" %5d",lb); 
-    printf("\n");
-  }
+  for (int itr=0;itr<ntr;itr++) PrintTracklet(itr);
+  //
 }
+
+//______________________________________________
+void AliXXXITSTracker::PrintTracklet(Int_t itr) const
+{
+  // print single tracklet
+  const SPDtracklet_t* trk = &fTracklets[itr];
+  AliITSRecPoint* cl1 = fLayers[kALrSPD1]->GetClusterSorted(trk->id1);
+  AliITSRecPoint* cl2 = fLayers[kALrSPD2]->GetClusterSorted(trk->id2);
+  AliXXXLayer::ClsInfo_t* cli0 = fLayers[kALrSPD1]->GetClusterInfo(trk->id1);
+  printf("#%3d Phi:%+.3f Eta:%+.3f Dphi:%+.3f Dtht:%+.3f Chi2:%.3f | Lbl:",
+	 itr,cli0->phi,
+	 -TMath::Log(TMath::Tan(TMath::ATan2(cli0->r,cli0->z-fSPDVertex->GetZ())/2.)),
+	 trk->dphi,trk->dtht,trk->chi2);
+  int lb = 0;
+  for (int i=0;i<3;i++) if ( (lb=cl1->GetLabel(i))>=0 ) printf(" %5d",lb); printf("|");
+  for (int i=0;i<3;i++) if ( (lb=cl2->GetLabel(i))>=0 ) printf(" %5d",lb); 
+  printf("\n");
+}
+
 
 //______________________________________________
 void AliXXXITSTracker::PrintTracks() const
@@ -471,8 +483,8 @@ Bool_t AliXXXITSTracker::CreateTrack(AliXXXITSTracker::ITStrack_t& track,
   float par[5] = {yv, zv, (float)TMath::Sin(cli1->phi-detInfo1.phiTF), (cli1->z-zv)/cli1->r, qptInv};
   double covVtx[6]; 
   fSPDVertex->GetCovarianceMatrix(covVtx);
-  float cov[15] = {float(covVtx[0]+covVtx[2]),
-		   0, float(covVtx[5]),
+  float cov[15] = {float(covVtx[0]+covVtx[2] + fAddErr2YspdVtx),
+		   0, float(covVtx[5] + fAddErr2ZspdVtx),
 		   0,0,1,
 		   0,0,0,1,
 		   0,0,0,0,100*100};
@@ -537,58 +549,61 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
   double dz   = TMath::Sqrt(trCopy.GetSigmaZ2()*fNSigma2[lrIDA]+fZToler2[lrIDA]);
   AliXXXLayer* lrA = fLayers[lrIDA];
   int nCl = lrA->SelectClusters(z-dz,z+dz,phi-dphi,phi+dphi);
-  if (!nCl) return kFALSE;
-  //
-  int icl,iclBest=-1;
-  double chi2Best = fMaxChi2Tr2Cl;
-  AliITSRecPoint* bestCl = 0;
-  AliExternalTrackParam bestTr;
   Bool_t updDone = kFALSE;
-  while ( (icl=lrA->GetNextClusterInfoID())!=-1) {
-    AliXXXLayer::ClsInfo_t *cli = lrA->GetClusterInfo(icl);
-    AliITSRecPoint *cl=lrA->GetClusterUnSorted(cli->index);
-    int detId = cl->GetVolumeId()-lrA->GetVIDOffset();
-    AliXXXLayer::ITSDetInfo_t& detInfo = lrA->GetDetInfo(detId);
-    trCopy = track.paramOut;
-    if (!trCopy.Propagate(detInfo.phiTF, detInfo.xTF+cl->GetX(), fBz)) continue;
-    double cpar[2]={ cl->GetY(), cl->GetZ()};
-    double ccov[3]={ cl->GetSigmaY2() + GetClSystYErr2(lrIDA) , 0., cl->GetSigmaZ2() + GetClSystZErr2(lrIDA)};
-    double chi2cl = trCopy.GetPredictedChi2(cpar,ccov);
-    if (chi2cl>fMaxChi2Tr2Cl) continue;
-    //    SaveCandidate(lrIDA,trCopy,chi2cl,icl);  // RS: do we need this?
-    if (chi2cl>chi2Best) continue;
-    chi2Best = chi2cl;
-    iclBest = icl;
-    bestCl = cl;
-    bestTr = trCopy;
-    if (nCl==1) { // in absence of competitors, do the fit on spot
-      if (!bestTr.Update(cpar,ccov)) return kFALSE;
-      updDone = kTRUE;
+  //
+  if (nCl) {
+    int icl,iclBest=-1;
+    double chi2Best = fMaxChi2Tr2Cl;
+    AliITSRecPoint* bestCl = 0;
+    AliExternalTrackParam bestTr;
+    //
+    while ( (icl=lrA->GetNextClusterInfoID())!=-1) {
+      AliXXXLayer::ClsInfo_t *cli = lrA->GetClusterInfo(icl);
+      AliITSRecPoint *cl=lrA->GetClusterUnSorted(cli->index);
+      int detId = cl->GetVolumeId()-lrA->GetVIDOffset();
+      AliXXXLayer::ITSDetInfo_t& detInfo = lrA->GetDetInfo(detId);
+      trCopy = track.paramOut;
+      if (!trCopy.Propagate(detInfo.phiTF, detInfo.xTF+cl->GetX(), fBz)) continue;
+      double cpar[2]={ cl->GetY(), cl->GetZ()};
+      double ccov[3]={ cl->GetSigmaY2() + GetClSystYErr2(lrIDA) , 0., cl->GetSigmaZ2() + GetClSystZErr2(lrIDA)};
+      double chi2cl = trCopy.GetPredictedChi2(cpar,ccov);
+      if (chi2cl>fMaxChi2Tr2Cl) continue;
+      //    SaveCandidate(lrIDA,trCopy,chi2cl,icl);  // RS: do we need this?
+      if (chi2cl>chi2Best) continue;
+      chi2Best = chi2cl;
+      iclBest = icl;
+      bestCl = cl;
+      bestTr = trCopy;
+      if (nCl==1) { // in absence of competitors, do the fit on spot
+	if (!bestTr.Update(cpar,ccov)) return kFALSE;
+	updDone = kTRUE;
+      }
+    }
+    printf("Lr%d -> %f\n",lrIDA,chi2Best);
+    //
+    if (bestCl) {
+      if (!updDone) {
+	double cpar[2]={ bestCl->GetY(), bestCl->GetZ()};
+	double ccov[3]={ bestCl->GetSigmaY2(), 0., bestCl->GetSigmaZ2()}; // RS: add syst errors    
+	if (!bestTr.Update(cpar,ccov)) return kFALSE;
+	updDone = kTRUE;
+      }
+      track.paramOut = bestTr;
+      track.clID[lrIDA] = iclBest;      
+      track.ncl++;
+      track.chi2 += chi2Best;      
     }
   }
-  printf("Lr%d -> %f\n",lrIDA,chi2Best);
-  if (bestCl) {
-    if (!updDone) {
-      double cpar[2]={ bestCl->GetY(), bestCl->GetZ()};
-      double ccov[3]={ bestCl->GetSigmaY2(), 0., bestCl->GetSigmaZ2()}; // RS: add syst errors    
-      if (!bestTr.Update(cpar,ccov)) return kFALSE;
-    }
-    track.ncl++;
-    track.chi2 += chi2Best;
-  }
-  else {
+  //
+  if (!updDone) {
     if (++track.nmiss > fMaxMissedLayers)  return kFALSE;
+    track.paramOut = trCopy;
     track.chi2 += fMissChi2Penalty;
   }
   //
   if (track.chi2 > GetChi2TotCut(track.ncl+1)) return kFALSE;
   //
-  if (bestTr.CorrectForMeanMaterial(fgkX2X0ITS[lrID],-fgkRhoLITS[lrID],fgkDefMass,kFALSE)) {
-    track.paramOut = bestTr;
-    track.clID[lrIDA] = iclBest;
-    return kTRUE;
-  }
-  return kFALSE;
+  return track.paramOut.CorrectForMeanMaterial(fgkX2X0ITS[lrID],-fgkRhoLITS[lrID],fgkDefMass,kFALSE);
   //
 }
 
@@ -753,6 +768,24 @@ void AliXXXITSTracker::RefitInward()
   //
 }
 
+/*
+//______________________________________________
+Bool_t AliXXXITSTracker::FitTrackVertex()
+{
+  // refit tracks inward with material correction
+  for (int itr=fNTracks;itr--;) {
+    //
+    AliExternalTrackParam& trc = fTracks[itr].paramInw;
+    if (trc.TestBit(kInvalidBit)) continue; // the track is invalidated, skip
+    //
+    if (!RefitInward(itr)) {
+      printf("RefitInward failed for track %d\n",itr);
+      PrintTrack(fTracks[itr]);
+    }
+  }
+  //
+}
+*/
  
 #ifdef _TIMING_
 //______________________________________________

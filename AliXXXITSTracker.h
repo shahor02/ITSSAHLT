@@ -72,7 +72,8 @@ class AliXXXITSTracker : public TObject
   Double_t GetClSystZErr2(Int_t lr)    const        {return fgkClSystZErr2[lr];}
   //
   int  GetNTracklets()                 const        {return (int)fTracklets.size();}
-  void PrintTracklets() const;
+  void PrintTracklets()                const;
+  void PrintTracklet(Int_t itr)        const;
   // methods for trackleting ----------------<<<
   //
   // methods for track reconstruction ------->>>
@@ -132,6 +133,8 @@ class AliXXXITSTracker : public TObject
   Float_t  fZSPD2CutMin;                          //! min Z of tracklet SPD2 to consider tracking
   Float_t  fZSPD2CutMax;                          //! max Z of tracklet SPD2 to consider tracking
   Float_t  fMaxChi2Tr2Cl;                         //! cut on cluster-to-track chi2
+  Float_t  fAddErr2YspdVtx;                       //! additional error to Y of the SPD vertex in track fit
+  Float_t  fAddErr2ZspdVtx;                       //! additional error to Z of the SPD vertex in track fit
   Float_t  fChi2TotCut[kNLrActive];               //! cut on total chi2 depending on track length
   //
   Float_t  fNSigma2[kNLrActive];                  //! N^2 sigma margin for cluster search

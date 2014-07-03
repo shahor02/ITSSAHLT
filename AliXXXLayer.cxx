@@ -171,7 +171,7 @@ void AliXXXLayer::SortClusters(const AliVertex* vtx)
     }
     fBins[currBin].ncl++;
   }
-  //  Print("clb"); //RS
+  Print("clb"); //RS
 }
 
 //_________________________________________________________________
@@ -243,25 +243,48 @@ int AliXXXLayer::SelectClusters(float zmin,float zmax,float phimin,float phimax)
   BringTo02Pi(phimax);
   fQueryPhiBmin = GetPhiBin(phimin);
   fQueryPhiBmax = GetPhiBin(phimax);
-  //
   int dbz=0;
   fNFoundClusters = 0;
-  for (int ip=fQueryPhiBmin;ip<=fQueryPhiBmax;ip++) {
-    if (ip==fNPhiBins) ip = 0;                 // 2pi-0 wrapped
-    int binID = GetBinIndex(fQueryZBmin,ip);
-    if ( !(dbz=(fQueryZBmax-fQueryZBmin)) ) { // just one Z bin in the query range 
-      ClBinInfo_t& binInfo = fBins[binID];
-      if (!binInfo.ncl) continue;
-      fNFoundClusters += binInfo.ncl;
-      fFoundBins.push_back(binID);
-      continue;
+  int nbcheck = fQueryPhiBmax - fQueryPhiBmin + 1;
+  if (nbcheck>0) { // no wrapping around 0-2pi, fast case
+    for (int ip=fQueryPhiBmin;ip<=fQueryPhiBmax;ip++) {
+      int binID = GetBinIndex(fQueryZBmin,ip);
+      if ( !(dbz=(fQueryZBmax-fQueryZBmin)) ) { // just one Z bin in the query range 
+	ClBinInfo_t& binInfo = fBins[binID];
+	if (!binInfo.ncl) continue;
+	fNFoundClusters += binInfo.ncl;
+	fFoundBins.push_back(binID);
+	continue;
+      }
+      int binMax = binID+dbz;
+      for (;binID<=binMax;binID++) {
+	ClBinInfo_t& binInfo = fBins[binID];
+	if (!binInfo.ncl) continue;
+	fNFoundClusters += binInfo.ncl;
+	fFoundBins.push_back(binID);
+      }      
     }
-    int binMax = binID+dbz;
-    for (;binID<=binMax;binID++) {
-      ClBinInfo_t& binInfo = fBins[binID];
-      if (!binInfo.ncl) continue;
-      fNFoundClusters += binInfo.ncl;
-      fFoundBins.push_back(binID);
+  }
+  else {  // wrapping
+    nbcheck += fNPhiBins;
+    for (int ip0=0;ip0<=nbcheck;ip0++) {
+      int ip = fQueryPhiBmin+ip0;
+      if (ip>=fNPhiBins) ip -= fNPhiBins;
+      int binID = GetBinIndex(fQueryZBmin,ip);
+      if ( !(dbz=(fQueryZBmax-fQueryZBmin)) ) { // just one Z bin in the query range 
+	ClBinInfo_t& binInfo = fBins[binID];
+	if (!binInfo.ncl) continue;
+	fNFoundClusters += binInfo.ncl;
+	fFoundBins.push_back(binID);
+	continue;
+      }
+      int binMax = binID+dbz;
+      for (;binID<=binMax;binID++) {
+	ClBinInfo_t& binInfo = fBins[binID];
+	if (!binInfo.ncl) continue;
+	fNFoundClusters += binInfo.ncl;
+	fFoundBins.push_back(binID);
+      }
     }
   }
   fFoundClusterIterator = fFoundBinIterator = 0;
