@@ -1,10 +1,9 @@
 #include "AliXXXITSTracker.h"
 #include "AliXXXLayer.h"
 #include "AliITSRecPoint.h"
-#include "AliESDVertex.h"
 #include "AliGeomManager.h"
 #include "AliVParticle.h"
-
+#include "AliSymMatrix.h"
 
 
 ClassImp(AliXXXITSTracker)
@@ -768,24 +767,93 @@ void AliXXXITSTracker::RefitInward()
   //
 }
 
-/*
+
 //______________________________________________
 Bool_t AliXXXITSTracker::FitTrackVertex()
 {
-  // refit tracks inward with material correction
+  // Fit the vertexTracks. The inner tracks must be already propagated to the SPD vertex.
+  // In this case straight line extrapolation can be used
+  //
+  fTrackVertex.SetNContributors(0); // invalidate
+  //
+  if (fNTracks<3) return kFALSE;
+  double cxx=0,cxy=0,cxz=0,cx0=0,cyy=0,cyz=0,cy0=0,czz=0,cz0=0;
+  //
+  int ntAcc = 0;
   for (int itr=fNTracks;itr--;) {
     //
     AliExternalTrackParam& trc = fTracks[itr].paramInw;
     if (trc.TestBit(kInvalidBit)) continue; // the track is invalidated, skip
+    double *param = (double*)trc.GetParameter();
+    double *covar = (double*)trc.GetCovariance();
     //
-    if (!RefitInward(itr)) {
-      printf("RefitInward failed for track %d\n",itr);
-      PrintTrack(fTracks[itr]);
-    }
+    double  x0i=trc.GetX();
+    double &y0i=param[0];
+    double &z0i=param[1];
+    double &sn=param[2];
+    double cs2=(1.-sn)*(1.+sn);
+    if (cs2<kAlmost0) continue;
+    double cs=TMath::Sqrt(cs2), tgp=sn/cs, tgl=trc.GetTgl()/cs;
+    // assume straight track equation Y=y0i+tgp*X, Z=z0i+tgl*X
+    double &syy=covar[0], &syz=covar[1], &szz=covar[2];
+    //
+    double tmpSP = sn*tgp;
+    double tmpCP = cs*tgp;
+    double tmpSC = sn+tmpCP;
+    double tmpCS =-cs+tmpSP;
+    double tmpCL = cs*tgl;
+    double tmpSL = sn*tgl;
+    double tmpYXP = y0i-tgp*x0i;
+    double tmpZXL = z0i-tgl*x0i;
+    //
+    double tmpCLzz = tmpCL*szz;
+    double tmpSLzz = tmpSL*szz;
+    double tmpSCyz = tmpSC*syz;
+    double tmpCSyz = tmpCS*syz;
+    double tmpCSyy = tmpCS*syy;
+    double tmpSCyy = tmpSC*syy;
+    double tmpSLyz = tmpSL*syz;
+    double tmpCLyz = tmpCL*syz;
+    //
+    cxx += tmpCL*(tmpCLzz+tmpSCyz+tmpSCyz)+tmpSC*tmpSCyy;          // dchi^2/dx/dx
+    cxy += tmpCL*(tmpSLzz+tmpCSyz)+tmpSL*tmpSCyz+tmpSC*tmpCSyy;    // dchi^2/dx/dy
+    cxz += -sn*syz-tmpCLzz-tmpCP*syz;                              // dchi^2/dx/dz
+    cx0 += -(tmpCLyz+tmpSCyy)*tmpYXP-(tmpCLzz+tmpSCyz)*tmpZXL;     // RHS 
+    //
+    //double cyx
+    cyy += tmpSL*(tmpSLzz+tmpCSyz+tmpCSyz)+tmpCS*tmpCSyy;          // dchi^2/dy/dy
+    cyz += -(tmpCSyz+tmpSLzz);                                     // dchi^2/dy/dz
+    cy0 += -tmpYXP*(tmpCSyy+tmpSLyz)-tmpZXL*(tmpCSyz+tmpSLzz);     // RHS
+    //
+    //double czx
+    //double czy
+    czz += szz;                                                    // dchi^2/dz/dz
+    cz0 += tmpZXL*szz+tmpYXP*syz;                                  // RHS
+    //
+    ntAcc++;
   }
   //
+  double vec[3] = {cx0,cy0,cz0};
+  AliSymMatrix mat(3);
+  mat(0,0) = cxx;
+  mat(0,1) = cxy;
+  mat(0,2) = cxz;
+  mat(1,1) = cyy;
+  mat(1,2) = cyz;
+  mat(2,2) = czz;
+  if (mat.SolveChol(vec,kTRUE)) {
+    printf("FittedVertex: %e %e %e\n",vec[0],vec[1],vec[2]);
+    mat.Print();
+    double vtCov[6] = {mat(0,0),mat(0,1),mat(1,1),mat(0,2),mat(1,2),mat(2,2)};
+    fTrackVertex.SetXYZ(vec);
+    fTrackVertex.SetCovarianceMatrix(vtCov);
+    fTrackVertex.SetNContributors(ntAcc);
+    return kTRUE;
+  }
+  //
+  return kFALSE;
 }
-*/
+
  
 #ifdef _TIMING_
 //______________________________________________

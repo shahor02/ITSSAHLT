@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <vector>
 #include "AliExternalTrackParam.h"
+#include "AliESDVertex.h"
 
 //------- compilation options, comment out all for best performance ------
 #define _TIMING_                            // print timing info
@@ -96,6 +97,7 @@ class AliXXXITSTracker : public TObject
   Int_t   GetTrackletMCTruth(AliXXXITSTracker::SPDtracklet_t& trlet) const;
   void    RefitInward();
   Bool_t  RefitInward(int itr);
+  Bool_t  FitTrackVertex();
   // methods for track reconstruction -------<<<
   //
 #ifdef _TIMING_
@@ -149,7 +151,7 @@ class AliXXXITSTracker : public TObject
   Int_t     fMaxMissedLayers;                        //! allow to miss at most this number of layers
   Int_t     fNTracks;                                        //! n found tracks
   std::vector<ITStrack_t> fTracks;                //! found tracks container
-
+  AliESDVertex fTrackVertex;                      //! fitted track vertex
   // for track reconstruction ------------ <<<
   //		      
 		      
