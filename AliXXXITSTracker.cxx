@@ -84,6 +84,7 @@ AliXXXITSTracker::AliXXXITSTracker() :
   ,fMissChi2Penalty(3)
   ,fMaxMissedLayers(1)
   ,fNTracks(0)
+  ,fFitVertex(kTRUE)
   //
   ,fSPDVertex(0)
 {
@@ -163,6 +164,13 @@ void AliXXXITSTracker::ProcessEvent()
   //
   Tracklets2Tracks();
   RefitInward();
+  //
+  if (fFitVertex) {
+    if (FitTrackVertex()) {
+      printf("FittedVertex: "); fTrackVertex.Print();
+      printf("SPD   Vertex: "); fSPDVertex->Print();
+    }
+  }
   //
 #ifdef _TIMING_
   fSW[kSWTracks].Stop();
@@ -787,15 +795,21 @@ Bool_t AliXXXITSTracker::FitTrackVertex()
     double *param = (double*)trc.GetParameter();
     double *covar = (double*)trc.GetCovariance();
     //
-    double  x0i=trc.GetX();
-    double &y0i=param[0];
-    double &z0i=param[1];
+    double  x0=trc.GetX();
+    double &y0=param[0];
+    double &z0=param[1];
     double &sn=param[2];
     double cs2=(1.-sn)*(1.+sn);
     if (cs2<kAlmost0) continue;
     double cs=TMath::Sqrt(cs2), tgp=sn/cs, tgl=trc.GetTgl()/cs;
-    // assume straight track equation Y=y0i+tgp*X, Z=z0i+tgl*X
+    // assume straight track equation Y=y0+tgp*X, Z=z0+tgl*X
     double &syy=covar[0], &syz=covar[1], &szz=covar[2];
+    double detI = syy*szz - syz*syz;
+    if (TMath::Abs(detI)<kAlmost0) return kFALSE;
+    detI = 1./detI;
+    double syyI = szz*detI;
+    double szzI = syy*detI;
+    double syzI =-syz*detI;
     //
     double tmpSP = sn*tgp;
     double tmpCP = cs*tgp;
@@ -803,21 +817,21 @@ Bool_t AliXXXITSTracker::FitTrackVertex()
     double tmpCS =-cs+tmpSP;
     double tmpCL = cs*tgl;
     double tmpSL = sn*tgl;
-    double tmpYXP = y0i-tgp*x0i;
-    double tmpZXL = z0i-tgl*x0i;
+    double tmpYXP = y0-tgp*x0;
+    double tmpZXL = z0-tgl*x0;
     //
-    double tmpCLzz = tmpCL*szz;
-    double tmpSLzz = tmpSL*szz;
-    double tmpSCyz = tmpSC*syz;
-    double tmpCSyz = tmpCS*syz;
-    double tmpCSyy = tmpCS*syy;
-    double tmpSCyy = tmpSC*syy;
-    double tmpSLyz = tmpSL*syz;
-    double tmpCLyz = tmpCL*syz;
+    double tmpCLzz = tmpCL*szzI;
+    double tmpSLzz = tmpSL*szzI;
+    double tmpSCyz = tmpSC*syzI;
+    double tmpCSyz = tmpCS*syzI;
+    double tmpCSyy = tmpCS*syyI;
+    double tmpSCyy = tmpSC*syyI;
+    double tmpSLyz = tmpSL*syzI;
+    double tmpCLyz = tmpCL*syzI;
     //
     cxx += tmpCL*(tmpCLzz+tmpSCyz+tmpSCyz)+tmpSC*tmpSCyy;          // dchi^2/dx/dx
     cxy += tmpCL*(tmpSLzz+tmpCSyz)+tmpSL*tmpSCyz+tmpSC*tmpCSyy;    // dchi^2/dx/dy
-    cxz += -sn*syz-tmpCLzz-tmpCP*syz;                              // dchi^2/dx/dz
+    cxz += -sn*syzI-tmpCLzz-tmpCP*syzI;                            // dchi^2/dx/dz
     cx0 += -(tmpCLyz+tmpSCyy)*tmpYXP-(tmpCLzz+tmpSCyz)*tmpZXL;     // RHS 
     //
     //double cyx
@@ -827,8 +841,8 @@ Bool_t AliXXXITSTracker::FitTrackVertex()
     //
     //double czx
     //double czy
-    czz += szz;                                                    // dchi^2/dz/dz
-    cz0 += tmpZXL*szz+tmpYXP*syz;                                  // RHS
+    czz += szzI;                                                    // dchi^2/dz/dz
+    cz0 += tmpZXL*szzI+tmpYXP*syzI;                                 // RHS
     //
     ntAcc++;
   }
@@ -841,13 +855,47 @@ Bool_t AliXXXITSTracker::FitTrackVertex()
   mat(1,1) = cyy;
   mat(1,2) = cyz;
   mat(2,2) = czz;
+  printf("MatBefore: \n"); mat.Print("d");
   if (mat.SolveChol(vec,kTRUE)) {
-    printf("FittedVertex: %e %e %e\n",vec[0],vec[1],vec[2]);
-    mat.Print();
+    printf("MatAfter : \n"); mat.Print("d");
+    //
     double vtCov[6] = {mat(0,0),mat(0,1),mat(1,1),mat(0,2),mat(1,2),mat(2,2)};
     fTrackVertex.SetXYZ(vec);
     fTrackVertex.SetCovarianceMatrix(vtCov);
     fTrackVertex.SetNContributors(ntAcc);
+    //
+    // calculate explicitly chi2
+    double chiTRC = 0;
+    double chiSPD = 0;
+    //
+    for (int itr=fNTracks;itr--;) {
+      AliExternalTrackParam& trc = fTracks[itr].paramInw;
+      if (trc.TestBit(kInvalidBit)) continue; // the track is invalidated, skip
+      AliExternalTrackParam trT(trc);
+      AliExternalTrackParam trS(trc);
+      double dz[2],covdum[3],*covt;
+      trT.PropagateToDCA(&fTrackVertex,fBz,10,dz,covdum);
+      covt = (double*)trT.GetCovariance();
+      double detI = covt[0]*covt[2] - covt[1]*covt[1];
+      detI = 1./detI;
+      double syyI = covt[2]*detI;
+      double szzI = covt[0]*detI;
+      double syzI =-covt[1]*detI;
+      chiTRC += dz[0]*dz[0]*syyI + dz[1]*dz[1]*szzI + 2*dz[0]*dz[1]*syzI;
+      //
+      trS.PropagateToDCA(fSPDVertex,fBz,10,dz,covdum);
+      covt = (double*)trT.GetCovariance();
+      detI = covt[0]*covt[2] - covt[1]*covt[1];
+      detI = 1./detI;
+      syyI = covt[2]*detI;
+      szzI = covt[0]*detI;
+      syzI =-covt[1]*detI;
+      chiSPD += dz[0]*dz[0]*syyI + dz[1]*dz[1]*szzI + 2*dz[0]*dz[1]*syzI;
+    }
+    printf("VTFIT %d %8.2f %8.2f   %.4f %.4f %.4f   %.4f %.4f %.4f\n",ntAcc,chiTRC,chiSPD,
+	   fTrackVertex.GetX(),fTrackVertex.GetY(),fTrackVertex.GetZ(),
+	   fSPDVertex->GetX(),fSPDVertex->GetY(),fSPDVertex->GetZ());
+    //
     return kTRUE;
   }
   //

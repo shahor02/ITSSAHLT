@@ -152,6 +152,7 @@ class AliXXXITSTracker : public TObject
   Int_t     fNTracks;                                        //! n found tracks
   std::vector<ITStrack_t> fTracks;                //! found tracks container
   AliESDVertex fTrackVertex;                      //! fitted track vertex
+  Bool_t    fFitVertex;                           //! fit vertex with tracks
   // for track reconstruction ------------ <<<
   //		      
 		      

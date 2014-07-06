@@ -27,6 +27,8 @@
 #include "AliITSgeomTGeo.h"
 #include "AliITSRecPoint.h"
 #include "AliCDBManager.h"
+#include "AliHeader.h"
+#include "AliGenEventHeader.h"
 //
 #include "HistoManager.h"
 
@@ -178,6 +180,14 @@ void TestTracker(TTree* tRP, const AliESDVertex* vtx)
   //
   vtx->Print();
   esd->GetMultiplicity()->Print("t");
+  //
+  AliHeader* hd = runLoader->GetHeader();
+  AliGenEventHeader* hdmc;
+  if (hd && (hdmc=hd->GenEventHeader()) ) {
+    TArrayF vtxMC;
+    hdmc->PrimaryVertex(vtxMC);
+    printf("MCvtx: %f %f %f\n",vtxMC[0],vtxMC[1],vtxMC[2]);
+  }
 }
 
 //_________________________________________________
