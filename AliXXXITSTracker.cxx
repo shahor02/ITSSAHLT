@@ -798,11 +798,16 @@ Bool_t AliXXXITSTracker::FitTrackVertex()
     double  x0=trc.GetX();
     double &y0=param[0];
     double &z0=param[1];
-    double &sn=param[2];
+    double sn=param[2];
     double cs2=(1.-sn)*(1.+sn);
     if (cs2<kAlmost0) continue;
     double cs=TMath::Sqrt(cs2), tgp=sn/cs, tgl=trc.GetTgl()/cs;
-    // assume straight track equation Y=y0+tgp*X, Z=z0+tgl*X
+    // assume straight track equation Y=y0+tgp*X, Z=z0+tgl*X in tracking frame
+    //
+    double alp = trc.GetAlpha();
+    sn = TMath::Sin(alp); // parameters for rotation of vertex to
+    cs = TMath::Cos(alp); // tracking frame
+    //
     double &syy=covar[0], &syz=covar[1], &szz=covar[2];
     double detI = syy*szz - syz*syz;
     if (TMath::Abs(detI)<kAlmost0) return kFALSE;

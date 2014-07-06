@@ -97,9 +97,13 @@ class AliXXXITSTracker : public TObject
   Int_t   GetTrackletMCTruth(AliXXXITSTracker::SPDtracklet_t& trlet) const;
   void    RefitInward();
   Bool_t  RefitInward(int itr);
-  Bool_t  FitTrackVertex();
   // methods for track reconstruction -------<<<
   //
+  // methods for vertex reconstruction ------>>>
+  Bool_t  FitTrackVertex();
+  AliESDVertex& GetTrackVertex()      const       {return (AliESDVertex&)fTrackVertex;}
+  // methods for vertex reconstruction ------<<<
+
 #ifdef _TIMING_
   void PrintTiming();
 #endif
