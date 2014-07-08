@@ -5,6 +5,13 @@
 #include "AliVParticle.h"
 #include "AliSymMatrix.h"
 
+//
+#include "AliRunLoader.h"
+#include "AliHeader.h"
+#include "AliGenEventHeader.h"
+#include "AliStack.h"
+#include "TParticle.h"
+
 
 ClassImp(AliXXXITSTracker)
 
@@ -387,6 +394,7 @@ void AliXXXITSTracker::PrintTrack(const AliXXXITSTracker::ITStrack_t& track) con
 {
   // print track info
   printf("Chi2 = %f for %d clusters. Tracklet %d\n",track.chi2,track.ncl,track.trackletID);
+  //  
   for (int ilr=0;ilr<kNLrActive;ilr++) {
     if (track.clID[ilr]<0) continue;
     AliITSRecPoint* cl = fLayers[ilr]->GetClusterSorted(track.clID[ilr]);
@@ -420,10 +428,20 @@ void AliXXXITSTracker::PrintTracklet(Int_t itr) const
 	 itr,cli0->phi,
 	 -TMath::Log(TMath::Tan(TMath::ATan2(cli0->r,cli0->z-fSPDVertex->GetZ())/2.)),
 	 trk->dphi,trk->dtht,trk->chi2);
-  int lb = 0;
-  for (int i=0;i<3;i++) if ( (lb=cl1->GetLabel(i))>=0 ) printf(" %5d",lb); printf("|");
+  int lab=-1,lb = -1;
+  for (int i=0;i<3;i++) if ( (lb=cl1->GetLabel(i))>=0 ) {if (lab<0)lab=lb; printf(" %5d",lb);} printf("|");
   for (int i=0;i<3;i++) if ( (lb=cl2->GetLabel(i))>=0 ) printf(" %5d",lb); 
   printf("\n");
+  //
+  AliStack* stack = 0;
+  AliRunLoader* rl = AliRunLoader::Instance();
+  if (lab>=0 && rl && (stack=rl->Stack())) {
+    TParticle* mctr = stack->Particle(lab);
+    if (mctr) {
+      double pt = mctr->Pt();
+      printf("MCTrack: 1/pt: %.3f tgl: %.3f\n",pt>0 ? 1./pt : 9999., TMath::Tan(TMath::Pi()/2. - mctr->Theta()));
+    }
+  }
 }
 
 
@@ -558,12 +576,16 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
   int nCl = lrA->SelectClusters(z-dz,z+dz,phi-dphi,phi+dphi);
   Bool_t updDone = kFALSE;
   //
+  printf("at Lr%d, Ncl:%d ",lrIDA,nCl);
+  track.paramOut.Print();
+  //
   if (nCl) {
     int icl,iclBest=-1;
     double chi2Best = fMaxChi2Tr2Cl;
     AliITSRecPoint* bestCl = 0;
     AliExternalTrackParam bestTr;
     //
+    int iclt=0; //TMP
     while ( (icl=lrA->GetNextClusterInfoID())!=-1) {
       AliXXXLayer::ClsInfo_t *cli = lrA->GetClusterInfo(icl);
       AliITSRecPoint *cl=lrA->GetClusterUnSorted(cli->index);
@@ -574,6 +596,10 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
       double cpar[2]={ cl->GetY(), cl->GetZ()};
       double ccov[3]={ cl->GetSigmaY2() + GetClSystYErr2(lrIDA) , 0., cl->GetSigmaZ2() + GetClSystZErr2(lrIDA)};
       double chi2cl = trCopy.GetPredictedChi2(cpar,ccov);
+      printf("cl%d Chi2:%.2f Dyz: %+e %+e Err: %e %e %e |Lb:",iclt++,chi2cl, 
+	     cl->GetY()-trCopy.GetY(),cl->GetZ()-trCopy.GetZ(),
+	     TMath::Sqrt(ccov[0]),ccov[1],TMath::Sqrt(ccov[2])); //TMP
+      for (int j=0;j<3;j++) if (cl->GetLabel(j)>=0) printf(" %d",cl->GetLabel(j)); printf("\n");
       if (chi2cl>fMaxChi2Tr2Cl) continue;
       //    SaveCandidate(lrIDA,trCopy,chi2cl,icl);  // RS: do we need this?
       if (chi2cl>chi2Best) continue;
@@ -860,6 +886,17 @@ Bool_t AliXXXITSTracker::FitTrackVertex()
   mat(1,1) = cyy;
   mat(1,2) = cyz;
   mat(2,2) = czz;
+
+  //-------------------------TMP>>>
+  AliRunLoader* rl = AliRunLoader::Instance();
+  AliHeader* hd = 0;
+  AliGenEventHeader* hdmc=0;
+  TArrayF vtxMC(3);
+  if (rl && (hd=rl->GetHeader()) && (hdmc=hd->GenEventHeader())) {
+    hdmc->PrimaryVertex(vtxMC);
+  }
+  //-------------------------TMP<<<
+
   printf("MatBefore: \n"); mat.Print("d");
   if (mat.SolveChol(vec,kTRUE)) {
     printf("MatAfter : \n"); mat.Print("d");
@@ -897,7 +934,9 @@ Bool_t AliXXXITSTracker::FitTrackVertex()
       syzI =-covt[1]*detI;
       chiSPD += dz[0]*dz[0]*syyI + dz[1]*dz[1]*szzI + 2*dz[0]*dz[1]*syzI;
     }
-    printf("VTFIT %d %8.2f %8.2f   %.4f %.4f %.4f   %.4f %.4f %.4f\n",ntAcc,chiTRC,chiSPD,
+    printf("VTFIT %f %f %f %d %8.2f %8.2f   %.4f %.4f %.4f   %.4f %.4f %.4f\n",
+	   vtxMC[0],vtxMC[1],vtxMC[2],
+	   ntAcc,chiTRC,chiSPD,
 	   fTrackVertex.GetX(),fTrackVertex.GetY(),fTrackVertex.GetZ(),
 	   fSPDVertex->GetX(),fSPDVertex->GetY(),fSPDVertex->GetZ());
     //

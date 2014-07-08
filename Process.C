@@ -128,8 +128,8 @@ void ProcChunk(const char* path)
   }
   esd->ReadFromTree(treeInp);
   //
-  for(Int_t iEv=0; iEv<runLoader->GetNumberOfEvents(); iEv++){
-    //  for(Int_t iEv=99; iEv<=99; iEv++){
+  //  for(Int_t iEv=0; iEv<runLoader->GetNumberOfEvents(); iEv++){
+  for(Int_t iEv=54; iEv<=54; iEv++){
     printf("ev %d\n",iEv);
     ProcessEvent(iEv);
   }
@@ -181,6 +181,7 @@ void TestTracker(TTree* tRP, const AliESDVertex* vtx)
   //  vtx->Print();
   //  esd->GetMultiplicity()->Print("t");
   //
+  /*
   AliHeader* hd = runLoader->GetHeader();
   AliGenEventHeader* hdmc;
   if (tracker->GetTrackVertex().GetStatus()==1 && hd && (hdmc=hd->GenEventHeader()) ) {
@@ -188,6 +189,7 @@ void TestTracker(TTree* tRP, const AliESDVertex* vtx)
     hdmc->PrimaryVertex(vtxMC);
     printf("MCvtx: %f %f %f\n",vtxMC[0],vtxMC[1],vtxMC[2]);
   }
+  */
 }
 
 //_________________________________________________

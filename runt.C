@@ -6,7 +6,8 @@ void runt(){
   AliCDBManager* man = AliCDBManager::Instance();
   man->SetDefaultStorage("local:///home/shahoian/ALICE/Aliroot/OCDB");
   //  man->SetSpecificStorage("ITS/Align/Data","alien://folder=/alice/simulation/2008/v4-15-Release/Residual");
-  man->SetSpecificStorage("ITS/Align/Data","alien://folder=/alice/simulation/2008/v4-15-Release/Ideal");
+  //  man->SetSpecificStorage("ITS/Align/Data","alien://folder=/alice/simulation/2008/v4-15-Release/Ideal");
+  man->SetSpecificStorage("ITS/Align/Data","local:///alice/simulation/2008/v4-15-Release/Ideal");
 
   gROOT->ProcessLine(".L AliXXXAux.cxx+");
   gROOT->ProcessLine(".L AliXXXLayer.cxx+");
