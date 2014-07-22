@@ -1,8 +1,11 @@
 #ifndef ALIXXXITSTRACKER_H
 #define ALIXXXITSTRACKER_H
 
+#include <TH1.h>
+#include <TH2.h>
 #include <TBits.h>
 #include <TStopwatch.h>
+#include <TObjArray.h>
 #include <algorithm>
 #include <vector>
 #include "AliExternalTrackParam.h"
@@ -10,6 +13,7 @@
 
 //------- compilation options, comment out all for best performance ------
 #define _TIMING_                            // print timing info
+#define _CONTROLH_                          // fill control histos
 //------------------------------------------------------------------------
 
 class AliITSRecPoint;
@@ -27,6 +31,7 @@ class AliXXXITSTracker : public TObject
   struct SPDtracklet {
     int id1;
     int id2;
+    int label;
     float dphi;
     float dtht;
     float chi2;
@@ -73,6 +78,7 @@ class AliXXXITSTracker : public TObject
   Double_t GetClSystZErr2(Int_t lr)    const        {return fgkClSystZErr2[lr];}
   //
   int  GetNTracklets()                 const        {return (int)fTracklets.size();}
+  int  GetNTracks()                    const        {return fNTracks;}
   void PrintTracklets()                const;
   void PrintTracklet(Int_t itr)        const;
   // methods for trackleting ----------------<<<
@@ -89,7 +95,8 @@ class AliXXXITSTracker : public TObject
   Bool_t  CrossPassiveLayer(AliExternalTrackParam& track, Int_t lrID);
   Bool_t  FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_t lrID);
   Double_t GetXatLabRLin(AliExternalTrackParam& track, double r);
-  void    CookLabel(AliXXXITSTracker::ITStrack_t track);
+  void    CookLabel(AliXXXITSTracker::ITStrack_t& track);
+  void    CookLabel(AliXXXITSTracker::SPDtracklet_t& tracklet);
   void    PrintTrack(const AliXXXITSTracker::ITStrack_t& track) const;
   Bool_t  IsObligatoryLayer(int lr)    const        {return !fSkipLayer[lr];}
   Bool_t  IsAcceptableTrack(const AliXXXITSTracker::ITStrack_t& track) const;
@@ -185,6 +192,20 @@ class AliXXXITSTracker : public TObject
   TStopwatch fSW[kNSW];
 #endif
   //
+#ifdef _CONTROLH_
+ protected:
+  TObjArray fArrHisto;
+  TH2F *fHTrackletMC,*fHTrackletAll,*fHTrackletFake,*fHTrackMC,*fHTrackAll,*fHTrackFake,*fHVtxDiffXY,
+    *fHVtxDiffXMlt,*fHVtxDiffYMlt;
+  TH1F *fHVtxMltRef,*fHVtxOKMlt,*fHVtxDiffZ;
+  //
+  void FillRecoStat();
+  void BookHistos();
+ public:
+  void SaveHistos(const char* outFName="XXXITSTrackerControlH.root");
+  TObjArray* GetHistos() const {return (TObjArray*)&fArrHisto;}
+#endif
+
   ClassDef(AliXXXITSTracker,0)
 };
 
