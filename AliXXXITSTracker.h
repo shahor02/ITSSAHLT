@@ -200,10 +200,13 @@ class AliXXXITSTracker : public TObject
   TH1F *fHVtxMltRef,*fHVtxOKMlt,*fHVtxDiffZ;
   //
   void FillRecoStat();
+  void FillTrackingControlHistos(int lrID,int lbl,const AliExternalTrackParam* bestTr,
+				 const double cpar[2],const double ccov[3],const AliITSRecPoint* bestCl)
   void BookHistos();
  public:
   void SaveHistos(const char* outFName="XXXITSTrackerControlH.root");
   TObjArray* GetHistos() const {return (TObjArray*)&fArrHisto;}
+  enum {kHResidY,kHPullY,kHResidZ,kHPullZ,kHChi2Cl};
 #endif
 
   ClassDef(AliXXXITSTracker,0)

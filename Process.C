@@ -128,8 +128,8 @@ void ProcChunk(const char* path)
   }
   esd->ReadFromTree(treeInp);
   //
-  for(Int_t iEv=0; iEv<runLoader->GetNumberOfEvents(); iEv++){
-    //for(Int_t iEv=54; iEv<=54; iEv++){
+  //for(Int_t iEv=0; iEv<runLoader->GetNumberOfEvents(); iEv++){
+    for(Int_t iEv=2; iEv<=2; iEv++){
     printf("ev %d\n",iEv);
     ProcessEvent(iEv);
   }
