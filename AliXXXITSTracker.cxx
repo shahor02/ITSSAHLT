@@ -97,7 +97,13 @@ AliXXXITSTracker::AliXXXITSTracker() :
   ,fSPDVertex(0)
 #ifdef _CONTROLH_
   ,fHTrackletMC(0),fHTrackletAll(0),fHTrackletFake(0),fHTrackMC(0),fHTrackAll(0),fHTrackFake(0)
-  ,fHVtxDiffXY(0),fHVtxDiffXMlt(0),fHVtxDiffYMlt(0),fHVtxMltRef(0),fHVtxOKMlt(0),fHVtxDiffZ(0)
+  ,fHVtxDiffXY(0)
+  ,fHVtxDiffXMlt(0),fHVtxDiffYMlt(0),fHVtxDiffZMlt(0)
+  ,fHVtxPullXMlt(0),fHVtxPullYMlt(0),fHVtxPullZMlt(0)
+  ,fHVtxMCSPDDiffXY(0)
+  ,fHVtxMCSPDDiffXMlt(0),fHVtxMCSPDDiffYMlt(0),fHVtxMCSPDDiffZMlt(0)
+  ,fHVtxMCSPDPullXMlt(0),fHVtxMCSPDPullYMlt(0),fHVtxMCSPDPullZMlt(0)
+  ,fHVtxMltRef(0),fHVtxOKMlt(0),fHVtxDiffZ(0),fHVtxMCSPDDiffZ(0)
 #endif
 {
   // def. c-tor
@@ -271,6 +277,7 @@ Bool_t AliXXXITSTracker::FindTracklets()
   } while(nfound);
   //
   for (int itr=GetNTracklets();itr--;) CookLabel(fTracklets[itr]); 
+  //
   return kTRUE;
 }
 
@@ -454,6 +461,7 @@ void AliXXXITSTracker::PrintTracklet(Int_t itr) const
   for (int i=0;i<3;i++) if ( (lb=cl1->GetLabel(i))>=0 ) {if (lab<0)lab=lb; printf(" %5d",lb);} printf("|");
   for (int i=0;i<3;i++) if ( (lb=cl2->GetLabel(i))>=0 ) printf(" %5d",lb); 
   printf("| ->%d\n",trk->label);
+  lab = TMath::Abs(trk->label);
   //
   AliStack* stack = 0;
   AliRunLoader* rl = AliRunLoader::Instance();
@@ -461,11 +469,13 @@ void AliXXXITSTracker::PrintTracklet(Int_t itr) const
     TParticle* mctr = stack->Particle(lab);
     if (mctr) {
       TParticlePDG* mctrPDG = mctr->GetPDG();
-      double qpt = mctrPDG->Charge()>0 ? mctr->Pt() : -mctr->Pt();
-      printf("MCTrack: Prim:%d Vxyz: {%+.4f %+.4f %+.4f} 1/pt: %.3f tgl: %.3f\n",
-	     stack->IsPhysicalPrimary(lab),
-	     mctr->Vx(),mctr->Vy(),mctr->Vz(),
-	     TMath::Abs(qpt)>0 ? 1./qpt : 9999., TMath::Tan(TMath::Pi()/2. - mctr->Theta()));
+      if (mctrPDG) {
+	double qpt = mctrPDG->Charge()>0 ? mctr->Pt() : -mctr->Pt();
+	printf("MCTrack: Prim:%d Vxyz: {%+.4f %+.4f %+.4f} 1/pt: %.3f tgl: %.3f\n",
+	       stack->IsPhysicalPrimary(lab),
+	       mctr->Vx(),mctr->Vy(),mctr->Vz(),
+	       TMath::Abs(qpt)>0 ? 1./qpt : 9999., TMath::Tan(TMath::Pi()/2. - mctr->Theta()));
+      }
     }
   }
 }
@@ -558,7 +568,7 @@ Bool_t AliXXXITSTracker::CreateTrack(AliXXXITSTracker::ITStrack_t& track,
   track.chi2 += param.GetPredictedChi2(cpar1,ccov1);
   if (!param.Update(cpar1,ccov1)) return kFALSE;
 #ifdef _CONTROLH_
-  FillTrackingControlHistos(1,track.label,param,cpar1,ccov1,cl2);
+  FillTrackingControlHistos(1,track.label,&param,cpar1,ccov1,cl2);
 #endif  
   //
   track.clID[0] = trlet.id1;
@@ -607,7 +617,7 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
   Bool_t updDone = kFALSE;
   //
   printf("at Lr%d, Ncl:%d ",lrIDA,nCl);
-  track.paramOut.Print();
+  trCopy.Print();
   //
   if (nCl) {
     int icl,iclBest=-1;
@@ -637,6 +647,11 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
       for (int j=0;j<3;j++) if (cl->GetLabel(j)>=0) printf(" %d",cl->GetLabel(j)); printf("\n");
       printf("CL: X:%.4f Alp:%+.4f XYZ: %+.4f %+.4f %+.4f\n",xCl,alphaCl,clXYZ[0],clXYZ[1],clXYZ[2]);
       printf("TR: X:%.4f Alp:%+.4f XYZ: %+.4f %+.4f %+.4f\n",detInfo.xTF,detInfo.phiTF,trXYZ[0],trXYZ[1],trXYZ[2]);
+      trCopy.Print();
+      //
+#ifdef _CONTROLH_
+	FillTrackingControlHistos(lrIDA,track.label,&trCopy,cpar,ccov,cl);
+#endif	
       //
       if (chi2cl>fMaxChi2Tr2Cl) continue;
       //    SaveCandidate(lrIDA,trCopy,chi2cl,icl);  // RS: do we need this?
@@ -647,9 +662,6 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
       bestTr = trCopy;
       if (nCl==1) { // in absence of competitors, do the fit on spot
 	if (!bestTr.Update(cpar,ccov)) return kFALSE;
-#ifdef _CONTROLH_
-	FillTrackingControlHistos(lrIDA,track.label,bestTr,cpar,ccov,bestCl);
-#endif	
 	updDone = kTRUE;
       }
     }
@@ -660,9 +672,6 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
 	double cpar[2]={ bestCl->GetY(), bestCl->GetZ()};
 	double ccov[3]={ bestCl->GetSigmaY2(), 0., bestCl->GetSigmaZ2()}; // RS: add syst errors    
 	if (!bestTr.Update(cpar,ccov)) return kFALSE;
-#ifdef _CONTROLH_
-	FillTrackingControlHistos(lrIDA,track.label,bestTr,cpar,ccov,bestCl);
-#endif	
 	updDone = kTRUE;
       }
       track.paramOut = bestTr;
@@ -1122,9 +1131,34 @@ void AliXXXITSTracker::FillRecoStat()
       fHVtxDiffZ->Fill(dz);
       fHVtxDiffXMlt->Fill(nTrkS, dx);
       fHVtxDiffYMlt->Fill(nTrkS, dy);
+      fHVtxDiffZMlt->Fill(nTrkS, dz);
+      //
+      double sig[3];
+      fTrackVertex.GetSigmaXYZ(sig);    
+      if (sig[0]>0) fHVtxPullXMlt->Fill(nTrkS, dx/sig[0]);
+      if (sig[1]>0) fHVtxPullYMlt->Fill(nTrkS, dy/sig[1]);
+      if (sig[2]>0) fHVtxPullZMlt->Fill(nTrkS, dz/sig[2]);
     }
     fHVtxOKMlt->Fill(nTrkS);
   } 
+  //
+  if (fSPDVertex->GetStatus()==1 && hdmc) {
+    double dx = vtxMC[0]-fSPDVertex->GetX();
+    double dy = vtxMC[1]-fSPDVertex->GetY();
+    double dz = vtxMC[2]-fSPDVertex->GetZ();
+    fHVtxMCSPDDiffXY->Fill(dx,dy);
+    fHVtxMCSPDDiffZ->Fill(dz);
+    fHVtxMCSPDDiffXMlt->Fill(nTrkS, dx);
+    fHVtxMCSPDDiffYMlt->Fill(nTrkS, dy);
+    fHVtxMCSPDDiffZMlt->Fill(nTrkS, dz);
+    //
+    double sig[3];
+    fSPDVertex->GetSigmaXYZ(sig);    
+    if (sig[0]>0) fHVtxMCSPDPullXMlt->Fill(nTrkS, dx/sig[0]);
+    if (sig[1]>0) fHVtxMCSPDPullYMlt->Fill(nTrkS, dy/sig[1]);
+    if (sig[2]>0) fHVtxMCSPDPullZMlt->Fill(nTrkS, dz/sig[2]);
+    //
+  }
   //
 }
 
@@ -1132,41 +1166,82 @@ void AliXXXITSTracker::FillRecoStat()
 void AliXXXITSTracker::BookHistos()
 {
   // book control histos
-  const int kNBinMltSQ=100, kNBPt=20, kNBDiffVtx=50, kNResBins=50,kNPullBins=50,kNChiClBins=50;
-  const double kMaxMltSQ=50,kMaxPt=10, kMaxDiffVtx=0.05, kMaxResidYZ=0.5,kMaxPullYZ=10,kChiClMax=100;
+  const int kNBinMltSQ=100, kNBPt=30, kNBDiffVtx=50, kNResBins=250,kNPullBins=50,kNChiClBins=50,kNBPullVtx=50;
+  const double kMaxMltSQ=50,kMaxPt=3, kMaxDiffVtx=0.05, kMaxResidYZ=2.5,kMaxPullYZ=10,kChiClMax=100,kMaxPullVtx=10;
   //
   for (int ilr=0;ilr<kNLrActive;ilr++) {
     //
     // ----------------- These are histos to be filled during tracking
     // PropagateBack and RefitInward will be stored among the histos of 1st pass
     //
+    int ilrS = ilr*10;
     TString ttl = Form("residY%d",ilr);
     TH2F* hdy = new TH2F(ttl.Data(),ttl.Data(),kNBPt,0,kMaxPt,kNResBins,-kMaxResidYZ,kMaxResidYZ);
-    fArrHisto.AddAtAndExpant(ilr+kHResidY);
+    fArrHisto.AddAtAndExpand(hdy,ilrS+kHResidY);
     hdy->SetDirectory(0);
     //
     ttl = Form("residYPull%d",ilr);	
     TH2F* hdyp = new TH2F(ttl.Data(),ttl.Data(),kNBPt,0,kMaxPt,kNPullBins,-kMaxPullYZ,kMaxPullYZ);
-    fArrHisto.AddAtAndExpand(hdyp,ilr+kHPullY);
+    fArrHisto.AddAtAndExpand(hdyp,ilrS+kHPullY);
     hdyp->SetDirectory(0);
     //
-    ttl = Form("residZ%d_%s",ilr);	
+    ttl = Form("residZ%d",ilr);	
     TH2F* hdz = new TH2F(ttl.Data(),ttl.Data(),kNBPt,0,kMaxPt,kNResBins,-kMaxResidYZ,kMaxResidYZ);
-    fArrHisto.AddAtAndExpand(hdz,ilr+kHResidZ);
+    fArrHisto.AddAtAndExpand(hdz,ilrS+kHResidZ);
     hdz->SetDirectory(0);
     //
     ttl = Form("residZPull%d",ilr);		
     TH2F* hdzp = new TH2F(ttl.Data(),ttl.Data(),kNBPt,0,kMaxPt,kNPullBins,-kMaxPullYZ,kMaxPullYZ);
     hdzp->SetDirectory(0);
-    fArrHisto.AddAtAndExpand(hdzp,ilr+kHPullZ);
+    fArrHisto.AddAtAndExpand(hdzp,ilrS+kHPullZ);
     //
     ttl = Form("chi2Cl%d",ilr);		
     TH2F* hchi = new TH2F(ttl.Data(),ttl.Data(),kNBPt,0,kMaxPt, kNChiClBins,0.,kChiClMax);
     hchi->SetDirectory(0);
-    fArrHisto.AddAtAndExpand(hchi,ilr+kHChi2Cl);
+    fArrHisto.AddAtAndExpand(hchi,ilrS+kHChi2Cl);
   } // loop over layers
   //
+  // SPDvertex vs MC
+  fHVtxMCSPDDiffXY = new TH2F("vtxMCSPDDiffXY","vtxMC-vtxSPD XY",kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx,
+			    kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
+  fArrHisto.AddLast(fHVtxMCSPDDiffXY);
+  fHVtxMCSPDDiffXY->SetDirectory(0);
   //
+  fHVtxMCSPDDiffZ = new TH1F("vtxMCSPDDiffZ","vtxMC-vtxSPD Z",kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
+  fArrHisto.AddLast(fHVtxMCSPDDiffZ);
+  fHVtxMCSPDDiffZ->SetDirectory(0);
+  //
+  fHVtxMCSPDDiffXMlt = new TH2F("VtxMCSPDDiffXMlt","vX_{MC}-vX_{SPD} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+			   kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
+  fArrHisto.AddLast(fHVtxMCSPDDiffXMlt);
+  fHVtxMCSPDDiffXMlt->SetDirectory(0);
+  //
+  fHVtxMCSPDDiffYMlt = new TH2F("VtxMCSPDDiffYMlt","vY_{MC}-vY_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+			   kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
+  fArrHisto.AddLast(fHVtxMCSPDDiffYMlt);
+  fHVtxMCSPDDiffYMlt->SetDirectory(0);
+  //
+  fHVtxMCSPDDiffZMlt = new TH2F("VtxMCSPDDiffZMlt","vZ_{MC}-vZ_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+			   kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
+  fArrHisto.AddLast(fHVtxMCSPDDiffZMlt);
+  fHVtxMCSPDDiffZMlt->SetDirectory(0);
+  //
+  //
+  fHVtxMCSPDPullXMlt = new TH2F("VtxMCSPDPullXMlt","Pull vX_{MC}-vX_{SPD} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
+  fArrHisto.AddLast(fHVtxMCSPDPullXMlt);
+  fHVtxMCSPDPullXMlt->SetDirectory(0);
+  //
+  fHVtxMCSPDPullYMlt = new TH2F("VtxMCSPDPullYMlt","Pull vY_{MC}-vY_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
+  fArrHisto.AddLast(fHVtxMCSPDPullYMlt);
+  fHVtxMCSPDPullYMlt->SetDirectory(0);
+  //
+  fHVtxMCSPDPullZMlt = new TH2F("VtxMCSPDPullZMlt","Pull vZ_{MC}-vZ_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
+  fArrHisto.AddLast(fHVtxMCSPDPullZMlt);
+  fHVtxMCSPDPullZMlt->SetDirectory(0);
+   //
   fHTrackletMC = new TH2F("MCRefTracklet","MCRef Tracklet",kNBPt,0,kMaxPt, 2, -0.5, 1.5);
   fHTrackletMC->SetXTitle("p_{T}");
   fHTrackletMC->GetYaxis()->SetBinLabel(1,"sec");
@@ -1238,6 +1313,26 @@ void AliXXXITSTracker::BookHistos()
   fArrHisto.AddLast(fHVtxDiffYMlt);
   fHVtxDiffYMlt->SetDirectory(0);
   //
+  fHVtxDiffZMlt = new TH2F("VtxDiffZMlt","vZ_{MC}-vZ_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+			   kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
+  fArrHisto.AddLast(fHVtxDiffZMlt);
+  fHVtxDiffZMlt->SetDirectory(0);
+  //
+  fHVtxPullXMlt = new TH2F("VtxPullXMlt","Pull vX_{MC}-vX_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
+  fArrHisto.AddLast(fHVtxPullXMlt);
+  fHVtxPullXMlt->SetDirectory(0);
+  //
+  fHVtxPullYMlt = new TH2F("VtxPullYMlt","Pull vY_{MC}-vY_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
+  fArrHisto.AddLast(fHVtxPullYMlt);
+  fHVtxPullYMlt->SetDirectory(0);
+  //
+  fHVtxPullZMlt = new TH2F("VtxPullZMlt","Pull vZ_{MC}-vZ_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
+  fArrHisto.AddLast(fHVtxPullZMlt);
+  fHVtxPullZMlt->SetDirectory(0);
+  //
 }
 
 //______________________________________________
@@ -1259,7 +1354,7 @@ void AliXXXITSTracker::SaveHistos(const char* outFName)
 }
 
 //______________________________________________
-void AliXXXITSTracker::FillTrackingControlHistos(int lrID,int lbl,const AliExternalTrackParam& bestTr,
+void AliXXXITSTracker::FillTrackingControlHistos(int lrID,int lbl,const AliExternalTrackParam* track,
 						 const double cpar[2],const double ccov[3], 
 						 const AliITSRecPoint* bestCl)
 {
@@ -1267,16 +1362,17 @@ void AliXXXITSTracker::FillTrackingControlHistos(int lrID,int lbl,const AliExter
   Bool_t corr = kFALSE;
   for (int i=0;i<3;i++) if (bestCl->GetLabel(i)==lbl) {corr=kTRUE; break;}
   if (!corr) return;
-  double pt = bestTr.Pt();
-  double dy = cpar[0]-bestTr.GetY();
-  double dz = cpar[1]-bestTr.GetZ();
-  double sgy = TMath::Sqrt(cov[0]+bestTr.GetSigmaY2());
-  double sgz = TMath::Sqrt(cov[2]+bestTr.GetSigmaZ2());
-  ((TH2F*)fArrHisto[ilrID+kHResidY])->Fill(pt,dy);
-  ((TH2F*)fArrHisto[ilrID+kHPullY])->Fill(pt,dy/sgy);
-  ((TH2F*)fArrHisto[ilrID+kHResidZ])->Fill(pt,dz);
-  ((TH2F*)fArrHisto[ilrID+kHPullZ])->Fill(pt,dz/sgz);
-  ((TH2F*)fArrHisto[ilrID+kHChi2Cl])->Fill(pt,bestTr.GetPredictedChi2(cpar,ccov));
+  double pt = track->Pt();
+  double dy = cpar[0]-track->GetY();
+  double dz = cpar[1]-track->GetZ();
+  double sgy = TMath::Sqrt(ccov[0]+track->GetSigmaY2());
+  double sgz = TMath::Sqrt(ccov[2]+track->GetSigmaZ2());
+  int lrIDS = lrID*10;
+  ((TH2F*)fArrHisto[lrIDS+kHResidY])->Fill(pt,dy);
+  ((TH2F*)fArrHisto[lrIDS+kHPullY])->Fill(pt,dy/sgy);
+  ((TH2F*)fArrHisto[lrIDS+kHResidZ])->Fill(pt,dz);
+  ((TH2F*)fArrHisto[lrIDS+kHPullZ])->Fill(pt,dz/sgz);
+  ((TH2F*)fArrHisto[lrIDS+kHChi2Cl])->Fill(pt,track->GetPredictedChi2(cpar,ccov));
   //
 }
 

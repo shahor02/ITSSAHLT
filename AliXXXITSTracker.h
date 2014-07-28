@@ -195,13 +195,18 @@ class AliXXXITSTracker : public TObject
 #ifdef _CONTROLH_
  protected:
   TObjArray fArrHisto;
-  TH2F *fHTrackletMC,*fHTrackletAll,*fHTrackletFake,*fHTrackMC,*fHTrackAll,*fHTrackFake,*fHVtxDiffXY,
-    *fHVtxDiffXMlt,*fHVtxDiffYMlt;
-  TH1F *fHVtxMltRef,*fHVtxOKMlt,*fHVtxDiffZ;
+  TH2F *fHTrackletMC,*fHTrackletAll,*fHTrackletFake,*fHTrackMC,*fHTrackAll,*fHTrackFake,*fHVtxDiffXY
+    ,*fHVtxDiffXMlt,*fHVtxDiffYMlt,*fHVtxDiffZMlt
+    ,*fHVtxPullXMlt,*fHVtxPullYMlt,*fHVtxPullZMlt
+    ,*fHVtxMCSPDDiffXY
+    ,*fHVtxMCSPDDiffXMlt,*fHVtxMCSPDDiffYMlt,*fHVtxMCSPDDiffZMlt
+    ,*fHVtxMCSPDPullXY
+    ,*fHVtxMCSPDPullXMlt,*fHVtxMCSPDPullYMlt,*fHVtxMCSPDPullZMlt;
+  TH1F *fHVtxMltRef,*fHVtxOKMlt,*fHVtxDiffZ,*fHVtxMCSPDDiffZ;
   //
   void FillRecoStat();
   void FillTrackingControlHistos(int lrID,int lbl,const AliExternalTrackParam* bestTr,
-				 const double cpar[2],const double ccov[3],const AliITSRecPoint* bestCl)
+				 const double cpar[2],const double ccov[3],const AliITSRecPoint* bestCl);
   void BookHistos();
  public:
   void SaveHistos(const char* outFName="XXXITSTrackerControlH.root");
