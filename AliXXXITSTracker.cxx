@@ -186,7 +186,6 @@ void AliXXXITSTracker::ProcessEvent()
   //
   Tracklets2Tracks();
   RefitInward();
-  //
   if (fFitVertex) {
     if (FitTrackVertex()) {
       printf("FittedVertex: "); fTrackVertex.Print();
@@ -264,6 +263,8 @@ Bool_t AliXXXITSTracker::FindTracklets()
   spdL2.SortClusters(fSPDVertex);
   fNClusters[0] = spdL1.GetNClusters();
   fNClusters[1] = spdL2.GetNClusters();
+  //
+  if (fNClusters[0]<1 || fNClusters[1]<1) return kFALSE;
   //
   fSPD2Discard.resize(fNClusters[1]);
   fSPD1Tracklet.resize(fNClusters[0]);
@@ -835,7 +836,7 @@ Bool_t AliXXXITSTracker::RefitInward(int itr)
   AliXXXLayer::ITSDetInfo_t& detInfo = lrA->GetDetInfo(cl->GetVolumeId()-lrA->GetVIDOffset());
   if (!trin.RotateParamOnly(detInfo.phiTF)) return kFALSE;
   if (!trin.PropagateParamOnlyTo(detInfo.xTF+cl->GetX(), fBz)) return kFALSE;
- // init with outer cluster y,z and slopes, q/pt of outward track
+  // init with outer cluster y,z and slopes, q/pt of outward track
   double par[5] = {cl->GetY(), cl->GetZ(), trin.GetSnp(), trin.GetTgl(), trin.GetSigned1Pt()}; 
   double cov[15] = {cl->GetSigmaY2() + GetClSystYErr2(kALrSPD1), 
 		   0., cl->GetSigmaZ2() + GetClSystZErr2(kALrSPD1),
@@ -854,8 +855,8 @@ Bool_t AliXXXITSTracker::RefitInward(int itr)
     // there is a cluster, need to update
     lrA = fLayers[ilA];
     cl = lrA->GetClusterSorted(track.clID[ilA]);
-    detInfo = lrA->GetDetInfo(cl->GetVolumeId()-lrA->GetVIDOffset());
-    if (!trin.Propagate(detInfo.phiTF, detInfo.xTF+cl->GetX(), fBz)) return kFALSE;
+    AliXXXLayer::ITSDetInfo_t& detInfo1 = lrA->GetDetInfo(cl->GetVolumeId()-lrA->GetVIDOffset());
+    if (!trin.Propagate(detInfo1.phiTF, detInfo1.xTF+cl->GetX(), fBz)) return kFALSE;
     double cpar[2]={ cl->GetY(), cl->GetZ()};
     double ccov[3]={ cl->GetSigmaY2() + GetClSystYErr2(ilA) , 0., cl->GetSigmaZ2() + GetClSystZErr2(ilA)};
     if (!trin.Update(cpar,ccov)) return kFALSE;
@@ -1091,7 +1092,6 @@ void AliXXXITSTracker::FillRecoStat()
     int lblA = TMath::Abs(lbl);
     int bitoffs = lblA*kBitPerTrack;
     Bool_t isPrim = patternMC.TestBitNumber(bitoffs+kIsPrim);
-    printf(">>> %d %d\n",lbl,lblA);
     TParticle* mctr = stack->Particle(lblA);
     double pt = mctr->Pt();
     fHTrackletAll->Fill(pt,isPrim);

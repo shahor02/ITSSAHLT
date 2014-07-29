@@ -112,7 +112,7 @@ void AliXXXLayer::Init(int buffer)
       m.LocalToMaster(txyz,xyz);
       det.xTF = TMath::Sqrt(xyz[0]*xyz[0] + xyz[1]*xyz[1]);
       det.phiTF = TMath::ATan2(xyz[1],xyz[0]);
-      BringTo02Pi(det.phiTF);
+      //BringTo02Pi(det.phiTF);
       det.sinTF = TMath::Sin(det.phiTF);
       det.cosTF = TMath::Cos(det.phiTF);
       //

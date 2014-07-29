@@ -78,7 +78,8 @@ class AliXXXLayer
   AliITSRecPoint*         GetClusterSorted(int i)   const {return (AliITSRecPoint*)fClusters->UncheckedAt(fSortedClInfo[i].index);}
   AliITSRecPoint*         GetClusterUnSorted(int i) const {return (AliITSRecPoint*)fClusters->UncheckedAt(i);}
   //
-  AliXXXLayer::ITSDetInfo_t& GetDetInfo(int id)        const {return (ITSDetInfo_t&)fDetectors[id];}
+  AliXXXLayer::ITSDetInfo_t& GetDetInfo(int id)     const {return (ITSDetInfo_t&)fDetectors[id];}
+  Int_t                   GetNDetectors()           const {return fDetectors.size();}
 
   void         ClearSortedInfo();
   virtual void Clear(Option_t *opt="");
