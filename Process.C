@@ -81,7 +81,9 @@ void Process(const char* inpData)
       inpDtStr.ReadLine(inpf);
     }
   }
+#ifdef _CONTROLH_
   tracker->SaveHistos();
+#endif
 }
 
 void ProcChunk(const char* path)
@@ -128,7 +130,8 @@ void ProcChunk(const char* path)
   }
   esd->ReadFromTree(treeInp);
   //
-  for(Int_t iEv=0; iEv<100;iEv++) {//runLoader->GetNumberOfEvents(); iEv++){
+  //  for(Int_t iEv=0; iEv<100;iEv++) {
+  for (int iEv=0;iEv<runLoader->GetNumberOfEvents(); iEv++) {
     //  for(Int_t iEv=0; iEv<=33; iEv++){
     printf("ev %d\n",iEv);
     ProcessEvent(iEv);

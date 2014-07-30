@@ -13,7 +13,7 @@
 
 //------- compilation options, comment out all for best performance ------
 #define _TIMING_                            // print timing info
-#define _CONTROLH_                          // fill control histos
+//#define _CONTROLH_                          // fill control histos
 //------------------------------------------------------------------------
 
 class AliITSRecPoint;
@@ -201,7 +201,8 @@ class AliXXXITSTracker : public TObject
     ,*fHVtxMCSPDDiffXY
     ,*fHVtxMCSPDDiffXMlt,*fHVtxMCSPDDiffYMlt,*fHVtxMCSPDDiffZMlt
     ,*fHVtxMCSPDPullXY
-    ,*fHVtxMCSPDPullXMlt,*fHVtxMCSPDPullYMlt,*fHVtxMCSPDPullZMlt;
+    ,*fHVtxMCSPDPullXMlt,*fHVtxMCSPDPullYMlt,*fHVtxMCSPDPullZMlt
+    ,*fHChi2NDFvsPT,*fHChi2vsNC;
   TH1F *fHVtxMltRef,*fHVtxOKMlt,*fHVtxDiffZ,*fHVtxMCSPDDiffZ;
   //
   void FillRecoStat();

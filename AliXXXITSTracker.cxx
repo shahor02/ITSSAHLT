@@ -85,7 +85,7 @@ AliXXXITSTracker::AliXXXITSTracker() :
   ,fCurvMax(0)
   ,fZSPD2CutMin(1e9)
   ,fZSPD2CutMax(-1e9)
-  ,fMaxChi2Tr2Cl(35)
+  ,fMaxChi2Tr2Cl(40)
   ,fAddErr2YspdVtx(0.02*0.02)
   ,fAddErr2ZspdVtx(0.04*0.04)
   //
@@ -103,6 +103,7 @@ AliXXXITSTracker::AliXXXITSTracker() :
   ,fHVtxMCSPDDiffXY(0)
   ,fHVtxMCSPDDiffXMlt(0),fHVtxMCSPDDiffYMlt(0),fHVtxMCSPDDiffZMlt(0)
   ,fHVtxMCSPDPullXMlt(0),fHVtxMCSPDPullYMlt(0),fHVtxMCSPDPullZMlt(0)
+  ,fHChi2NDFvsPT(0),fHChi2vsNC(0)
   ,fHVtxMltRef(0),fHVtxOKMlt(0),fHVtxDiffZ(0),fHVtxMCSPDDiffZ(0)
 #endif
 {
@@ -136,11 +137,11 @@ void AliXXXITSTracker::Init()
     fZToler2[i] = 10;//0.2*0.2;
     fChi2TotCut[i] = 0;
   }  
-  fChi2TotCut[1] = 10; // 2 cl+vtx -> NDF=1
-  fChi2TotCut[2] = 15; 
-  fChi2TotCut[3] = 20; 
-  fChi2TotCut[4] = 24; 
-  fChi2TotCut[5] = 26; 
+  fChi2TotCut[1] = 40; // 2 cl+vtx -> NDF=1
+  fChi2TotCut[2] = 40; 
+  fChi2TotCut[3] = 30; 
+  fChi2TotCut[4] = 35; 
+  fChi2TotCut[5] = 40; 
   //
   fMissChi2Penalty = 3;
   fMaxMissedLayers = 1;
@@ -188,8 +189,8 @@ void AliXXXITSTracker::ProcessEvent()
   RefitInward();
   if (fFitVertex) {
     if (FitTrackVertex()) {
-      printf("FittedVertex: "); fTrackVertex.Print();
-      printf("SPD   Vertex: "); fSPDVertex->Print();
+      //      printf("FittedVertex: "); fTrackVertex.Print();
+      //      printf("SPD   Vertex: "); fSPDVertex->Print();
     }
   }
   //
@@ -377,18 +378,18 @@ void AliXXXITSTracker::Tracklets2Tracks()
   for (int itr=0;itr<nTrk;itr++) {
     SPDtracklet_t& trlet = fTracklets[itr];
     //
-    printf("TestTracklet %d\t|",itr);
+    //printf("TestTracklet %d\t|",itr);
     int stat = GetTrackletMCTruth(trlet);
     //
     int nmiss=0;
     for (int i=2;i<kNLrActive;i++) {
-      printf("%c", (stat&(0x1<<i)) ? '*':'-'); 
+      //printf("%c", (stat&(0x1<<i)) ? '*':'-'); 
       if (!(stat&(0x1<<i))) nmiss++;
     }
-    printf("|\n");
+    //printf("|\n");
     //
     //
-    PrintTracklet(itr);
+    //PrintTracklet(itr);
     //
     float zspd2 = fLayers[kALrSPD2]->GetClusterInfo(trlet.id2)->z;
     if (zspd2<fZSPD2CutMin || zspd2>fZSPD2CutMax) continue;
@@ -398,12 +399,12 @@ void AliXXXITSTracker::Tracklets2Tracks()
     Bool_t res;
     double xyz[3];
     track.paramOut.GetXYZAt(0,fBz,xyz);
-    printf("process track pt:%f XYZ: %+.4f %+.4f %+.4f\n",track.paramOut.Pt(),xyz[0],xyz[1],xyz[2]);
+    //printf("process track pt:%f XYZ: %+.4f %+.4f %+.4f\n",track.paramOut.Pt(),xyz[0],xyz[1],xyz[2]);
     for (int lrID=kLrShield1;lrID<kMaxLrITS;lrID++) {
       res = FollowToLayer(track,lrID) && IsAcceptableTrack(track);
       if (!res) break;
     }
-    printf("%s:%d\n",res ? "OK" : "Fail",nmiss<=fMaxMissedLayers);
+    //    printf("%s:%d\n",res ? "OK" : "Fail",nmiss<=fMaxMissedLayers);
     if (!res) continue;
     track.paramOut.ResetBit(kInvalidBit); // flag that outward fit succeeded
     CookLabel(track);
@@ -617,8 +618,8 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
   int nCl = lrA->SelectClusters(z-dz,z+dz,phi-dphi,phi+dphi);
   Bool_t updDone = kFALSE;
   //
-  printf("at Lr%d, Ncl:%d ",lrIDA,nCl);
-  trCopy.Print();
+  //  printf("at Lr%d, Ncl:%d ",lrIDA,nCl);
+  //  trCopy.Print();
   //
   if (nCl) {
     int icl,iclBest=-1;
@@ -642,6 +643,7 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
       double trXYZ[3]; trCopy.GetXYZ(trXYZ);
       Float_t xCl, alphaCl; 
       cl->GetXAlphaRefPlane(xCl,alphaCl);
+      /*
       printf("cl%d Chi2:%.2f Dyz: %+e %+e Err: %e %e %e |Lb:",iclt++,chi2cl, 
 	     cl->GetY()-trCopy.GetY(),cl->GetZ()-trCopy.GetZ(),
 	     TMath::Sqrt(ccov[0]),ccov[1],TMath::Sqrt(ccov[2])); //TMP
@@ -649,6 +651,7 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
       printf("CL: X:%.4f Alp:%+.4f XYZ: %+.4f %+.4f %+.4f\n",xCl,alphaCl,clXYZ[0],clXYZ[1],clXYZ[2]);
       printf("TR: X:%.4f Alp:%+.4f XYZ: %+.4f %+.4f %+.4f\n",detInfo.xTF,detInfo.phiTF,trXYZ[0],trXYZ[1],trXYZ[2]);
       trCopy.Print();
+      */
       //
 #ifdef _CONTROLH_
 	FillTrackingControlHistos(lrIDA,track.label,&trCopy,cpar,ccov,cl);
@@ -666,7 +669,7 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
 	updDone = kTRUE;
       }
     }
-    printf("Lr%d -> %f\n",lrIDA,chi2Best);
+    //    printf("Lr%d -> %f\n",lrIDA,chi2Best);
     //
     if (bestCl) {
       if (!updDone) {
@@ -688,6 +691,13 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
     track.chi2 += fMissChi2Penalty;
   }
   //
+#ifdef _CONTROLH_
+  int ndf = 2*track.ncl-5;
+  if (ndf>0) {
+    fHChi2vsNC->Fill(track.ncl,track.chi2); 
+    if (lrID==kNLrActive-1) fHChi2NDFvsPT->Fill(track.paramOut.Pt(),track.chi2/ndf);
+  }
+#endif
   if (track.chi2 > GetChi2TotCut(track.ncl+1)) return kFALSE;
   //
   return track.paramOut.CorrectForMeanMaterial(fgkX2X0ITS[lrID],-fgkRhoLITS[lrID],fgkDefMass,kFALSE);
@@ -984,9 +994,9 @@ Bool_t AliXXXITSTracker::FitTrackVertex()
   }
   //-------------------------TMP<<<
 
-  printf("MatBefore: \n"); mat.Print("d");
+  //  printf("MatBefore: \n"); mat.Print("d");
   if (mat.SolveChol(vec,kTRUE)) {
-    printf("MatAfter : \n"); mat.Print("d");
+    //printf("MatAfter : \n"); mat.Print("d");
     //
     double vtCov[6] = {mat(0,0),mat(0,1),mat(1,1),mat(0,2),mat(1,2),mat(2,2)};
     fTrackVertex.SetXYZ(vec);
@@ -1021,12 +1031,14 @@ Bool_t AliXXXITSTracker::FitTrackVertex()
       syzI =-covt[1]*detI;
       chiSPD += dz[0]*dz[0]*syyI + dz[1]*dz[1]*szzI + 2*dz[0]*dz[1]*syzI;
     }
+    /*
     printf("VTFIT %f %f %f %d %8.2f %8.2f   %.4f %.4f %.4f   %.4f %.4f %.4f\n",
 	   vtxMC[0],vtxMC[1],vtxMC[2],
 	   ntAcc,chiTRC,chiSPD,
 	   fTrackVertex.GetX(),fTrackVertex.GetY(),fTrackVertex.GetZ(),
 	   fSPDVertex->GetX(),fSPDVertex->GetY(),fSPDVertex->GetZ());
     //
+    */
     return kTRUE;
   }
   //
@@ -1201,6 +1213,14 @@ void AliXXXITSTracker::BookHistos()
     fArrHisto.AddAtAndExpand(hchi,ilrS+kHChi2Cl);
   } // loop over layers
   //
+  fHChi2NDFvsPT = new TH2F("chi2ndfPT","chi2/ndf total vs pt",kNBPt,0,kMaxPt, kNChiClBins,0.,kChiClMax);
+  fArrHisto.AddLast(fHChi2NDFvsPT);
+  fHChi2NDFvsPT->SetDirectory(0);
+  //
+  fHChi2vsNC = new TH2F("chi2NC","chi2 total vs NCl",kNLrActive-2,2.5,kNLrActive+0.5, kNChiClBins,0.,kChiClMax);
+  fArrHisto.AddLast(fHChi2vsNC);
+  fHChi2vsNC->SetDirectory(0);
+
   // SPDvertex vs MC
   fHVtxMCSPDDiffXY = new TH2F("vtxMCSPDDiffXY","vtxMC-vtxSPD XY",kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx,
 			    kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
