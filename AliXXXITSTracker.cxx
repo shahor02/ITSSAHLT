@@ -58,10 +58,10 @@ const Int_t   AliXXXITSTracker::fgkDummyLabel = -3141593;
 
 #ifdef _TIMING_
 const char* AliXXXITSTracker::fgkSWNames[AliXXXITSTracker::kNSW] = {
-  "Total:     "
-  ,"Tracklets: "
-  ,"Tracks:    "
-  ,"Vertex:    "
+  "Total"
+  ,"Tracklets"
+  ,"Tracks"
+  ,"Vertex"
 };
 #endif
 
@@ -132,9 +132,9 @@ void AliXXXITSTracker::Init()
     int iAct = fgkActiveLrITS[i];
     fLayers[i] = new AliXXXLayer(i,fgkZSpanITS[iAct]+1,fgkLrDefBins[i][0],fgkLrDefBins[i][1]);
     fSkipLayer[i] = kFALSE;
-    fNSigma2[i] = 5*5;
-    fYToler2[i] = 10;//0.2*0.2;
-    fZToler2[i] = 10;//0.2*0.2;
+    fNSigma2[i] = 7*7;
+    fYToler2[i] = 0.2*0.2;
+    fZToler2[i] = 0.2*0.2;
     fChi2TotCut[i] = 0;
   }  
   fChi2TotCut[1] = 40; // 2 cl+vtx -> NDF=1
@@ -178,6 +178,7 @@ void AliXXXITSTracker::ProcessEvent()
   fSW[kSWTracklets].Start(0);
 #endif
   //
+  fNTracks = 0;  
   FindTracklets();
   //
 #ifdef _TIMING_
@@ -187,18 +188,22 @@ void AliXXXITSTracker::ProcessEvent()
   //
   Tracklets2Tracks();
   RefitInward();
+#ifdef _TIMING_
+  fSW[kSWTracks].Stop();
+  fSW[kSWVertex].Start(0);
+#endif
   if (fFitVertex) {
     if (FitTrackVertex()) {
-      //      printf("FittedVertex: "); fTrackVertex.Print();
-      //      printf("SPD   Vertex: "); fSPDVertex->Print();
+#ifdef _DEBUG_
+      printf("FittedVertex: "); fTrackVertex.Print();
+      printf("SPD   Vertex: "); fSPDVertex->Print();
+#endif
     }
   }
   //
-#ifdef _TIMING_
-  fSW[kSWTracks].Stop();
-#endif
   //
 #ifdef _TIMING_
+  fSW[kSWVertex].Stop();
   fSW[kSWTotal].Stop();
   PrintTiming();
 #endif
@@ -373,23 +378,23 @@ void AliXXXITSTracker::Tracklets2Tracks()
   }
   //
   fTracks.resize(nTrk);
-  fNTracks = 0;
+
   //
   for (int itr=0;itr<nTrk;itr++) {
     SPDtracklet_t& trlet = fTracklets[itr];
     //
-    //printf("TestTracklet %d\t|",itr);
+#ifdef _DEBUG_
+    printf("TestTracklet %d\t|",itr);
     int stat = GetTrackletMCTruth(trlet);
     //
     int nmiss=0;
     for (int i=2;i<kNLrActive;i++) {
-      //printf("%c", (stat&(0x1<<i)) ? '*':'-'); 
+      printf("%c", (stat&(0x1<<i)) ? '*':'-'); 
       if (!(stat&(0x1<<i))) nmiss++;
     }
-    //printf("|\n");
-    //
-    //
-    //PrintTracklet(itr);
+    printf("|\n");
+    PrintTracklet(itr);
+#endif
     //
     float zspd2 = fLayers[kALrSPD2]->GetClusterInfo(trlet.id2)->z;
     if (zspd2<fZSPD2CutMin || zspd2>fZSPD2CutMax) continue;
@@ -397,14 +402,18 @@ void AliXXXITSTracker::Tracklets2Tracks()
     if (!CreateTrack(track, trlet)) continue;
     track.trackletID = itr;
     Bool_t res;
+#ifdef _DEBUG_
     double xyz[3];
     track.paramOut.GetXYZAt(0,fBz,xyz);
-    //printf("process track pt:%f XYZ: %+.4f %+.4f %+.4f\n",track.paramOut.Pt(),xyz[0],xyz[1],xyz[2]);
+    printf("process track pt:%f XYZ: %+.4f %+.4f %+.4f\n",track.paramOut.Pt(),xyz[0],xyz[1],xyz[2]);
+#endif
     for (int lrID=kLrShield1;lrID<kMaxLrITS;lrID++) {
       res = FollowToLayer(track,lrID) && IsAcceptableTrack(track);
       if (!res) break;
     }
-    //    printf("%s:%d\n",res ? "OK" : "Fail",nmiss<=fMaxMissedLayers);
+#ifdef _DEBUG_
+    printf("%s:%d\n",res ? "OK" : "Fail",nmiss<=fMaxMissedLayers);
+#endif
     if (!res) continue;
     track.paramOut.ResetBit(kInvalidBit); // flag that outward fit succeeded
     CookLabel(track);
@@ -618,8 +627,10 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
   int nCl = lrA->SelectClusters(z-dz,z+dz,phi-dphi,phi+dphi);
   Bool_t updDone = kFALSE;
   //
-  //  printf("at Lr%d, Ncl:%d ",lrIDA,nCl);
-  //  trCopy.Print();
+#ifdef _DEBUG_
+  printf("at Lr%d, Ncl:%d ",lrIDA,nCl);
+  trCopy.Print();
+#endif
   //
   if (nCl) {
     int icl,iclBest=-1;
@@ -627,7 +638,9 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
     AliITSRecPoint* bestCl = 0;
     AliExternalTrackParam bestTr;
     //
-    int iclt=0; //TMP
+#ifdef _DEBUG_
+    int iclt=0;
+#endif
     while ( (icl=lrA->GetNextClusterInfoID())!=-1) {
       AliXXXLayer::ClsInfo_t *cli = lrA->GetClusterInfo(icl);
       AliITSRecPoint *cl=lrA->GetClusterUnSorted(cli->index);
@@ -643,7 +656,8 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
       double trXYZ[3]; trCopy.GetXYZ(trXYZ);
       Float_t xCl, alphaCl; 
       cl->GetXAlphaRefPlane(xCl,alphaCl);
-      /*
+      //
+#ifdef _DEBUG_      
       printf("cl%d Chi2:%.2f Dyz: %+e %+e Err: %e %e %e |Lb:",iclt++,chi2cl, 
 	     cl->GetY()-trCopy.GetY(),cl->GetZ()-trCopy.GetZ(),
 	     TMath::Sqrt(ccov[0]),ccov[1],TMath::Sqrt(ccov[2])); //TMP
@@ -651,10 +665,10 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
       printf("CL: X:%.4f Alp:%+.4f XYZ: %+.4f %+.4f %+.4f\n",xCl,alphaCl,clXYZ[0],clXYZ[1],clXYZ[2]);
       printf("TR: X:%.4f Alp:%+.4f XYZ: %+.4f %+.4f %+.4f\n",detInfo.xTF,detInfo.phiTF,trXYZ[0],trXYZ[1],trXYZ[2]);
       trCopy.Print();
-      */
+#endif
       //
 #ifdef _CONTROLH_
-	FillTrackingControlHistos(lrIDA,track.label,&trCopy,cpar,ccov,cl);
+      FillTrackingControlHistos(lrIDA,track.label,&trCopy,cpar,ccov,cl);
 #endif	
       //
       if (chi2cl>fMaxChi2Tr2Cl) continue;
@@ -669,7 +683,9 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
 	updDone = kTRUE;
       }
     }
-    //    printf("Lr%d -> %f\n",lrIDA,chi2Best);
+#ifdef _DEBUG_
+    printf("Lr%d -> %f\n",lrIDA,chi2Best);
+#endif
     //
     if (bestCl) {
       if (!updDone) {
@@ -891,8 +907,10 @@ void AliXXXITSTracker::RefitInward()
   // refit tracks inward with material correction
   for (int itr=fNTracks;itr--;) {
     if (!RefitInward(itr)) {
+#ifdef _DEBUG_
       printf("RefitInward failed for track %d\n",itr);
       PrintTrack(fTracks[itr]);
+#endif
     }
   }
   //
@@ -993,10 +1011,13 @@ Bool_t AliXXXITSTracker::FitTrackVertex()
     hdmc->PrimaryVertex(vtxMC);
   }
   //-------------------------TMP<<<
-
-  //  printf("MatBefore: \n"); mat.Print("d");
+#ifdef _DEBUG_
+  printf("MatBefore: \n"); mat.Print("d");
+#endif
   if (mat.SolveChol(vec,kTRUE)) {
-    //printf("MatAfter : \n"); mat.Print("d");
+#ifdef _DEBUG_
+    printf("MatAfter : \n"); mat.Print("d");
+#endif
     //
     double vtCov[6] = {mat(0,0),mat(0,1),mat(1,1),mat(0,2),mat(1,2),mat(2,2)};
     fTrackVertex.SetXYZ(vec);
@@ -1031,14 +1052,14 @@ Bool_t AliXXXITSTracker::FitTrackVertex()
       syzI =-covt[1]*detI;
       chiSPD += dz[0]*dz[0]*syyI + dz[1]*dz[1]*szzI + 2*dz[0]*dz[1]*syzI;
     }
-    /*
+#ifdef _DEBUG_    
     printf("VTFIT %f %f %f %d %8.2f %8.2f   %.4f %.4f %.4f   %.4f %.4f %.4f\n",
 	   vtxMC[0],vtxMC[1],vtxMC[2],
 	   ntAcc,chiTRC,chiSPD,
 	   fTrackVertex.GetX(),fTrackVertex.GetY(),fTrackVertex.GetZ(),
 	   fSPDVertex->GetX(),fSPDVertex->GetY(),fSPDVertex->GetZ());
+#endif
     //
-    */
     return kTRUE;
   }
   //
@@ -1056,7 +1077,7 @@ void AliXXXITSTracker::FillRecoStat()
   if (!rl || !(stack=rl->Stack())) return;
   //
   TBits patternMC;
-  enum {kIsPrim=kNLrActive,kValidTracklet,kValidTrack,kBitPerTrack};
+  enum {kIsPrim=kNLrActive,kValidTracklet,kValidTrack,kRecDone,kBitPerTrack};
   int nTrkMC = stack->GetNtrack();
   patternMC.SetBitNumber(nTrkMC*kBitPerTrack,0);
   //
@@ -1097,7 +1118,7 @@ void AliXXXITSTracker::FillRecoStat()
   if (!nTrk) return;
   for (int itr=0;itr<nTrk;itr++) {
     SPDtracklet_t& trlet = fTracklets[itr];
-    PrintTracklet(itr);
+    //    PrintTracklet(itr);
     //
     int lbl = trlet.label;
     if (lbl==fgkDummyLabel) continue;
@@ -1122,8 +1143,11 @@ void AliXXXITSTracker::FillRecoStat()
     Bool_t isPrim = patternMC.TestBitNumber(bitoffs+kIsPrim);
     TParticle* mctr = stack->Particle(lblA);
     double pt = mctr->Pt();
-    fHTrackAll->Fill(pt,isPrim);
-    if (lbl<0) fHTrackFake->Fill(pt,isPrim);
+    Bool_t clone = patternMC.TestBitNumber(bitoffs+kRecDone); // was the track already reconstructed?
+    float bn = isPrim ? (clone ? 2:1):(clone ? -1:0);  // fill clones in over/underflow
+    fHTrackAll->Fill(pt,bn);
+    patternMC.SetBitNumber(bitoffs+kRecDone);
+    if (lbl<0) fHTrackFake->Fill(pt,bn);
   }
   //
   AliHeader* hd = rl->GetHeader();
@@ -1132,8 +1156,7 @@ void AliXXXITSTracker::FillRecoStat()
   if (hd && (hdmc=hd->GenEventHeader())) hdmc->PrimaryVertex(vtxMC);
   //
   nTrk = GetNTracklets();
-  double nTrkS = nTrk ? TMath::Sqrt(nTrk) : 0;
-  fHVtxMltRef->Fill(nTrkS);
+  fHVtxMltRef->Fill(nTrk);
   if (fTrackVertex.GetStatus()==1) {
     if (hdmc) {
       double dx = vtxMC[0]-fTrackVertex.GetX();
@@ -1141,17 +1164,17 @@ void AliXXXITSTracker::FillRecoStat()
       double dz = vtxMC[2]-fTrackVertex.GetZ();
       fHVtxDiffXY->Fill(dx,dy);
       fHVtxDiffZ->Fill(dz);
-      fHVtxDiffXMlt->Fill(nTrkS, dx);
-      fHVtxDiffYMlt->Fill(nTrkS, dy);
-      fHVtxDiffZMlt->Fill(nTrkS, dz);
+      fHVtxDiffXMlt->Fill(nTrk, dx);
+      fHVtxDiffYMlt->Fill(nTrk, dy);
+      fHVtxDiffZMlt->Fill(nTrk, dz);
       //
       double sig[3];
       fTrackVertex.GetSigmaXYZ(sig);    
-      if (sig[0]>0) fHVtxPullXMlt->Fill(nTrkS, dx/sig[0]);
-      if (sig[1]>0) fHVtxPullYMlt->Fill(nTrkS, dy/sig[1]);
-      if (sig[2]>0) fHVtxPullZMlt->Fill(nTrkS, dz/sig[2]);
+      if (sig[0]>0) fHVtxPullXMlt->Fill(nTrk, dx/sig[0]);
+      if (sig[1]>0) fHVtxPullYMlt->Fill(nTrk, dy/sig[1]);
+      if (sig[2]>0) fHVtxPullZMlt->Fill(nTrk, dz/sig[2]);
     }
-    fHVtxOKMlt->Fill(nTrkS);
+    fHVtxOKMlt->Fill(nTrk);
   } 
   //
   if (fSPDVertex->GetStatus()==1 && hdmc) {
@@ -1160,15 +1183,15 @@ void AliXXXITSTracker::FillRecoStat()
     double dz = vtxMC[2]-fSPDVertex->GetZ();
     fHVtxMCSPDDiffXY->Fill(dx,dy);
     fHVtxMCSPDDiffZ->Fill(dz);
-    fHVtxMCSPDDiffXMlt->Fill(nTrkS, dx);
-    fHVtxMCSPDDiffYMlt->Fill(nTrkS, dy);
-    fHVtxMCSPDDiffZMlt->Fill(nTrkS, dz);
+    fHVtxMCSPDDiffXMlt->Fill(nTrk, dx);
+    fHVtxMCSPDDiffYMlt->Fill(nTrk, dy);
+    fHVtxMCSPDDiffZMlt->Fill(nTrk, dz);
     //
     double sig[3];
     fSPDVertex->GetSigmaXYZ(sig);    
-    if (sig[0]>0) fHVtxMCSPDPullXMlt->Fill(nTrkS, dx/sig[0]);
-    if (sig[1]>0) fHVtxMCSPDPullYMlt->Fill(nTrkS, dy/sig[1]);
-    if (sig[2]>0) fHVtxMCSPDPullZMlt->Fill(nTrkS, dz/sig[2]);
+    if (sig[0]>0) fHVtxMCSPDPullXMlt->Fill(nTrk, dx/sig[0]);
+    if (sig[1]>0) fHVtxMCSPDPullYMlt->Fill(nTrk, dy/sig[1]);
+    if (sig[2]>0) fHVtxMCSPDPullZMlt->Fill(nTrk, dz/sig[2]);
     //
   }
   //
@@ -1178,9 +1201,12 @@ void AliXXXITSTracker::FillRecoStat()
 void AliXXXITSTracker::BookHistos()
 {
   // book control histos
-  const int kNBinMltSQ=100, kNBPt=30, kNBDiffVtx=50, kNResBins=250,kNPullBins=50,kNChiClBins=50,kNBPullVtx=50;
-  const double kMaxMltSQ=50,kMaxPt=3, kMaxDiffVtx=0.05, kMaxResidYZ=2.5,kMaxPullYZ=10,kChiClMax=100,kMaxPullVtx=10;
+  const int kNBinMlt=20, kNBPt=15, kNBDiffVtx=50, kNResBins=250,kNPullBins=50,kNChiClBins=50,kNBPullVtx=50;
+  const double kMinMlt=1,kMaxMlt=5000,kMinPt=0.01,kMaxPt=3, kMaxDiffVtx=0.05, kMaxResidYZ=2.5,kMaxPullYZ=10,kChiClMax=100,kMaxPullVtx=10;
   //
+  double* axLogPt  = DefLogAx(kMinPt,kMaxPt,kNBPt);
+  double* axLogMlt = DefLogAx(kMinMlt,kMaxMlt,kNBinMlt);
+
   for (int ilr=0;ilr<kNLrActive;ilr++) {
     //
     // ----------------- These are histos to be filled during tracking
@@ -1188,32 +1214,32 @@ void AliXXXITSTracker::BookHistos()
     //
     int ilrS = ilr*10;
     TString ttl = Form("residY%d",ilr);
-    TH2F* hdy = new TH2F(ttl.Data(),ttl.Data(),kNBPt,0,kMaxPt,kNResBins,-kMaxResidYZ,kMaxResidYZ);
+    TH2F* hdy = new TH2F(ttl.Data(),ttl.Data(),kNBPt,axLogPt,kNResBins,-kMaxResidYZ,kMaxResidYZ);
     fArrHisto.AddAtAndExpand(hdy,ilrS+kHResidY);
     hdy->SetDirectory(0);
     //
     ttl = Form("residYPull%d",ilr);	
-    TH2F* hdyp = new TH2F(ttl.Data(),ttl.Data(),kNBPt,0,kMaxPt,kNPullBins,-kMaxPullYZ,kMaxPullYZ);
+    TH2F* hdyp = new TH2F(ttl.Data(),ttl.Data(),kNBPt,axLogPt,kNPullBins,-kMaxPullYZ,kMaxPullYZ);
     fArrHisto.AddAtAndExpand(hdyp,ilrS+kHPullY);
     hdyp->SetDirectory(0);
     //
     ttl = Form("residZ%d",ilr);	
-    TH2F* hdz = new TH2F(ttl.Data(),ttl.Data(),kNBPt,0,kMaxPt,kNResBins,-kMaxResidYZ,kMaxResidYZ);
+    TH2F* hdz = new TH2F(ttl.Data(),ttl.Data(),kNBPt,axLogPt,kNResBins,-kMaxResidYZ,kMaxResidYZ);
     fArrHisto.AddAtAndExpand(hdz,ilrS+kHResidZ);
     hdz->SetDirectory(0);
     //
     ttl = Form("residZPull%d",ilr);		
-    TH2F* hdzp = new TH2F(ttl.Data(),ttl.Data(),kNBPt,0,kMaxPt,kNPullBins,-kMaxPullYZ,kMaxPullYZ);
+    TH2F* hdzp = new TH2F(ttl.Data(),ttl.Data(),kNBPt,axLogPt,kNPullBins,-kMaxPullYZ,kMaxPullYZ);
     hdzp->SetDirectory(0);
     fArrHisto.AddAtAndExpand(hdzp,ilrS+kHPullZ);
     //
     ttl = Form("chi2Cl%d",ilr);		
-    TH2F* hchi = new TH2F(ttl.Data(),ttl.Data(),kNBPt,0,kMaxPt, kNChiClBins,0.,kChiClMax);
+    TH2F* hchi = new TH2F(ttl.Data(),ttl.Data(),kNBPt,axLogPt, kNChiClBins,0.,kChiClMax);
     hchi->SetDirectory(0);
     fArrHisto.AddAtAndExpand(hchi,ilrS+kHChi2Cl);
   } // loop over layers
   //
-  fHChi2NDFvsPT = new TH2F("chi2ndfPT","chi2/ndf total vs pt",kNBPt,0,kMaxPt, kNChiClBins,0.,kChiClMax);
+  fHChi2NDFvsPT = new TH2F("chi2ndfPT","chi2/ndf total vs pt",kNBPt,axLogPt, kNChiClBins,0.,kChiClMax);
   fArrHisto.AddLast(fHChi2NDFvsPT);
   fHChi2NDFvsPT->SetDirectory(0);
   //
@@ -1231,85 +1257,85 @@ void AliXXXITSTracker::BookHistos()
   fArrHisto.AddLast(fHVtxMCSPDDiffZ);
   fHVtxMCSPDDiffZ->SetDirectory(0);
   //
-  fHVtxMCSPDDiffXMlt = new TH2F("VtxMCSPDDiffXMlt","vX_{MC}-vX_{SPD} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxMCSPDDiffXMlt = new TH2F("VtxMCSPDDiffXMlt","vX_{MC}-vX_{SPD} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
   fArrHisto.AddLast(fHVtxMCSPDDiffXMlt);
   fHVtxMCSPDDiffXMlt->SetDirectory(0);
   //
-  fHVtxMCSPDDiffYMlt = new TH2F("VtxMCSPDDiffYMlt","vY_{MC}-vY_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxMCSPDDiffYMlt = new TH2F("VtxMCSPDDiffYMlt","vY_{MC}-vY_{rec} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
   fArrHisto.AddLast(fHVtxMCSPDDiffYMlt);
   fHVtxMCSPDDiffYMlt->SetDirectory(0);
   //
-  fHVtxMCSPDDiffZMlt = new TH2F("VtxMCSPDDiffZMlt","vZ_{MC}-vZ_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxMCSPDDiffZMlt = new TH2F("VtxMCSPDDiffZMlt","vZ_{MC}-vZ_{rec} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
   fArrHisto.AddLast(fHVtxMCSPDDiffZMlt);
   fHVtxMCSPDDiffZMlt->SetDirectory(0);
   //
   //
-  fHVtxMCSPDPullXMlt = new TH2F("VtxMCSPDPullXMlt","Pull vX_{MC}-vX_{SPD} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxMCSPDPullXMlt = new TH2F("VtxMCSPDPullXMlt","Pull vX_{MC}-vX_{SPD} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
   fArrHisto.AddLast(fHVtxMCSPDPullXMlt);
   fHVtxMCSPDPullXMlt->SetDirectory(0);
   //
-  fHVtxMCSPDPullYMlt = new TH2F("VtxMCSPDPullYMlt","Pull vY_{MC}-vY_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxMCSPDPullYMlt = new TH2F("VtxMCSPDPullYMlt","Pull vY_{MC}-vY_{rec} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
   fArrHisto.AddLast(fHVtxMCSPDPullYMlt);
   fHVtxMCSPDPullYMlt->SetDirectory(0);
   //
-  fHVtxMCSPDPullZMlt = new TH2F("VtxMCSPDPullZMlt","Pull vZ_{MC}-vZ_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxMCSPDPullZMlt = new TH2F("VtxMCSPDPullZMlt","Pull vZ_{MC}-vZ_{rec} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
   fArrHisto.AddLast(fHVtxMCSPDPullZMlt);
   fHVtxMCSPDPullZMlt->SetDirectory(0);
    //
-  fHTrackletMC = new TH2F("MCRefTracklet","MCRef Tracklet",kNBPt,0,kMaxPt, 2, -0.5, 1.5);
+  fHTrackletMC = new TH2F("MCRefTracklet","MCRef Tracklet",kNBPt,axLogPt, 2, -0.5, 1.5);
   fHTrackletMC->SetXTitle("p_{T}");
   fHTrackletMC->GetYaxis()->SetBinLabel(1,"sec");
   fHTrackletMC->GetYaxis()->SetBinLabel(2,"prim");
   fArrHisto.AddLast(fHTrackletMC);
   fHTrackletMC->SetDirectory(0);
   //
-  fHTrackletAll = new TH2F("TrackletAll","Tracklet All rec",kNBPt,0,kMaxPt, 2, -0.5, 1.5);
+  fHTrackletAll = new TH2F("TrackletAll","Tracklet All rec",kNBPt,axLogPt, 2, -0.5, 1.5);
   fHTrackletAll->SetXTitle("p_{T}");
   fHTrackletAll->GetYaxis()->SetBinLabel(1,"sec");
   fHTrackletAll->GetYaxis()->SetBinLabel(2,"prim");
   fArrHisto.AddLast(fHTrackletAll);
   fHTrackletAll->SetDirectory(0);
   //
-  fHTrackletFake = new TH2F("TrackletFake","Tracklet Fake rec",kNBPt,0,kMaxPt, 2, -0.5, 1.5);
+  fHTrackletFake = new TH2F("TrackletFake","Tracklet Fake rec",kNBPt,axLogPt, 2, -0.5, 1.5);
   fHTrackletFake->SetXTitle("p_{T}");
   fHTrackletFake->GetYaxis()->SetBinLabel(1,"sec");
   fHTrackletFake->GetYaxis()->SetBinLabel(2,"prim");
   fArrHisto.AddLast(fHTrackletFake);
   fHTrackletFake->SetDirectory(0);
   //
-  fHTrackMC = new TH2F("MCRefTrack","MCRef Track",kNBPt,0,kMaxPt, 2, -0.5, 1.5);
+  fHTrackMC = new TH2F("MCRefTrack","MCRef Track",kNBPt,axLogPt, 2, -0.5, 1.5);
   fHTrackMC->SetXTitle("p_{T}");
   fHTrackMC->GetYaxis()->SetBinLabel(1,"sec");
   fHTrackMC->GetYaxis()->SetBinLabel(2,"prim");
   fArrHisto.AddLast(fHTrackMC);
   fHTrackMC->SetDirectory(0);
   //
-  fHTrackAll = new TH2F("TrackAll","Track All rec",kNBPt,0,kMaxPt, 2, -0.5, 1.5);
+  fHTrackAll = new TH2F("TrackAll","Track All rec",kNBPt,axLogPt, 2, -0.5, 1.5);
   fHTrackAll->SetXTitle("p_{T}");
   fHTrackAll->GetYaxis()->SetBinLabel(1,"sec");
   fHTrackAll->GetYaxis()->SetBinLabel(2,"prim");
   fArrHisto.AddLast(fHTrackAll);
   fHTrackAll->SetDirectory(0);
   //
-  fHTrackFake = new TH2F("TrackFake","Track Fake rec",kNBPt,0,kMaxPt, 2, -0.5, 1.5);
+  fHTrackFake = new TH2F("TrackFake","Track Fake rec",kNBPt,axLogPt, 2, -0.5, 1.5);
   fHTrackFake->SetXTitle("p_{T}");
   fHTrackFake->GetYaxis()->SetBinLabel(1,"sec");
   fHTrackFake->GetYaxis()->SetBinLabel(2,"prim");
   fArrHisto.AddLast(fHTrackFake);
   fHTrackFake->SetDirectory(0);
   //
-  fHVtxMltRef = new TH1F("vtxRef","vtxRef",kNBinMltSQ,0,kMaxMltSQ);
+  fHVtxMltRef = new TH1F("vtxRef","vtxRef",kNBinMlt,axLogMlt);
   fHVtxMltRef->SetXTitle("sqrt(Ntracklets)");
   fArrHisto.AddLast(fHVtxMltRef);
   fHVtxMltRef->SetDirectory(0);
   //
-  fHVtxOKMlt = new TH1F("vtxOK","vtxOK",kNBinMltSQ,0,kMaxMltSQ);
+  fHVtxOKMlt = new TH1F("vtxOK","vtxOK",kNBinMlt,axLogMlt);
   fHVtxOKMlt->SetXTitle("sqrt(Ntracklets)");
   fArrHisto.AddLast(fHVtxOKMlt);
   fHVtxOKMlt->SetDirectory(0);
@@ -1323,32 +1349,32 @@ void AliXXXITSTracker::BookHistos()
   fArrHisto.AddLast(fHVtxDiffZ);
   fHVtxDiffZ->SetDirectory(0);
   //
-  fHVtxDiffXMlt = new TH2F("VtxDiffXMlt","vX_{MC}-vX_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxDiffXMlt = new TH2F("VtxDiffXMlt","vX_{MC}-vX_{rec} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
   fArrHisto.AddLast(fHVtxDiffXMlt);
   fHVtxDiffXMlt->SetDirectory(0);
   //
-  fHVtxDiffYMlt = new TH2F("VtxDiffYMlt","vY_{MC}-vY_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxDiffYMlt = new TH2F("VtxDiffYMlt","vY_{MC}-vY_{rec} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
   fArrHisto.AddLast(fHVtxDiffYMlt);
   fHVtxDiffYMlt->SetDirectory(0);
   //
-  fHVtxDiffZMlt = new TH2F("VtxDiffZMlt","vZ_{MC}-vZ_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxDiffZMlt = new TH2F("VtxDiffZMlt","vZ_{MC}-vZ_{rec} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBDiffVtx,-kMaxDiffVtx,kMaxDiffVtx);
   fArrHisto.AddLast(fHVtxDiffZMlt);
   fHVtxDiffZMlt->SetDirectory(0);
   //
-  fHVtxPullXMlt = new TH2F("VtxPullXMlt","Pull vX_{MC}-vX_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxPullXMlt = new TH2F("VtxPullXMlt","Pull vX_{MC}-vX_{rec} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
   fArrHisto.AddLast(fHVtxPullXMlt);
   fHVtxPullXMlt->SetDirectory(0);
   //
-  fHVtxPullYMlt = new TH2F("VtxPullYMlt","Pull vY_{MC}-vY_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxPullYMlt = new TH2F("VtxPullYMlt","Pull vY_{MC}-vY_{rec} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
   fArrHisto.AddLast(fHVtxPullYMlt);
   fHVtxPullYMlt->SetDirectory(0);
   //
-  fHVtxPullZMlt = new TH2F("VtxPullZMlt","Pull vZ_{MC}-vZ_{rec} vs mlt",kNBinMltSQ,0,kMaxMltSQ, 
+  fHVtxPullZMlt = new TH2F("VtxPullZMlt","Pull vZ_{MC}-vZ_{rec} vs mlt",kNBinMlt,axLogMlt, 
 			   kNBPullVtx,-kMaxPullVtx,kMaxPullVtx);
   fArrHisto.AddLast(fHVtxPullZMlt);
   fHVtxPullZMlt->SetDirectory(0);
@@ -1396,6 +1422,20 @@ void AliXXXITSTracker::FillTrackingControlHistos(int lrID,int lbl,const AliExter
   //
 }
 
+//______________________________________________
+Double_t* AliXXXITSTracker::DefLogAx(double xMn,double xMx, int nbin)
+{
+  // get array for log axis
+  if (xMn<=0 || xMx<=xMn || nbin<2) {
+    printf("Wrong axis request: %f %f %d\n",xMn,xMx,nbin);
+    return 0;
+  }
+  double dx = log(xMx/xMn)/nbin;
+  double *xax = new Double_t[nbin+1];
+  for (int i=0;i<=nbin;i++) xax[i]= xMn*exp(dx*i);
+  return xax;
+}
+
 #endif
 //
 #ifdef _TIMING_
@@ -1403,6 +1443,6 @@ void AliXXXITSTracker::FillTrackingControlHistos(int lrID,int lbl,const AliExter
 void AliXXXITSTracker::PrintTiming()
 {
   // print timing info
-  for (int i=0;i<kNSW;i++) {printf("%s\t",fgkSWNames[i]); fSW[i].Print();}
+  for (int i=0;i<kNSW;i++) {printf("%-10s:\t",fgkSWNames[i]); fSW[i].Print();}
 }
 #endif

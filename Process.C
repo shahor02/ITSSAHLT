@@ -35,7 +35,8 @@
 #include "AliXXXAux.h"
 #include "AliXXXLayer.h"
 #include "AliXXXITSTracker.h"
-
+#include "TProfile.h"
+#include "TStopwatch.h"
 #endif
 
 
@@ -50,6 +51,12 @@ void Process(const char* path);
 void ProcChunk(const char* path);
 void TestTracker(TTree* tRP, const AliESDVertex* vtx);
 void LoadClusters(TTree* tRP);
+Double_t* DefLogAx(double xMn,double xMx, int nbin);
+
+
+#ifdef _TIMING_
+TProfile* hTiming[AliXXXITSTracker::kNSW];
+#endif
 
 void Process(const char* inpData)
 {
@@ -59,6 +66,14 @@ void Process(const char* inpData)
   man->SetRun(0);
   tracker = new AliXXXITSTracker(); 
   tracker->Init();
+  //
+#ifdef _TIMING_
+  int nbMlt = 100;
+  double *mltAx = DefLogAx(1,6000,nbMlt);
+  for (int i=0;i<AliXXXITSTracker::kNSW;i++) {
+    hTiming[i] = new TProfile(tracker->GetStopwatchName(i),tracker->GetStopwatchName(i),nbMlt,mltAx);
+  }
+#endif
   //
   TString inpDtStr = inpData;
   if (inpDtStr.EndsWith(".root") || inpDtStr.EndsWith(".zip#")) {
@@ -132,7 +147,7 @@ void ProcChunk(const char* path)
   //
   //  for(Int_t iEv=0; iEv<100;iEv++) {
   for (int iEv=0;iEv<runLoader->GetNumberOfEvents(); iEv++) {
-    //  for(Int_t iEv=0; iEv<=33; iEv++){
+    //    for(Int_t iEv=93; iEv<=95; iEv++){
     printf("ev %d\n",iEv);
     ProcessEvent(iEv);
   }
@@ -164,8 +179,24 @@ void ProcessEvent(int iEv)
     exit(1);
   }
   //
+#ifdef _TIMING_
+  static Double_t cpuTime[AliXXXITSTracker::kNSW] = {0};
+#endif
   printf("\n\n\nEvent: %d\n",iEv);
   TestTracker(treeITSRP, vtx);
+  //
+#ifdef _TIMING_
+  if (vtx->GetStatus()==1) {
+    double mlt = esd->GetMultiplicity()->GetNumberOfTracklets();
+    for (int i=0;i<AliXXXITSTracker::kNSW;i++) {
+      TStopwatch& sw = (TStopwatch&)tracker->GetStopwatch(i);
+      double tm = sw.CpuTime();
+      hTiming[i]->Fill(mlt, tm - cpuTime[i]);
+      cpuTime[i] = tm;
+    }
+  }
+#endif
+  //
   //esd->Reset();
   //
 }
@@ -178,8 +209,8 @@ void TestTracker(TTree* tRP, const AliESDVertex* vtx)
   tracker->SetSPDVertex(vtx);
   tracker->SetBz(esd->GetMagneticField());
   tracker->ProcessEvent();
-  tracker->PrintTracklets();
-  tracker->PrintTracks();  
+  //  tracker->PrintTracklets();
+  //  tracker->PrintTracks();  
   //
   //  vtx->Print();
   //  esd->GetMultiplicity()->Print("t");
@@ -217,4 +248,18 @@ void LoadClusters(TTree* tRP)
     }
   }
   //
+}
+
+//______________________________________________
+Double_t* DefLogAx(double xMn,double xMx, int nbin)
+{
+  // get array for log axis
+  if (xMn<=0 || xMx<=xMn || nbin<2) {
+    printf("Wrong axis request: %f %f %d\n",xMn,xMx,nbin);
+    return 0;
+  }
+  double dx = log(xMx/xMn)/nbin;
+  double *xax = new Double_t[nbin+1];
+  for (int i=0;i<=nbin;i++) xax[i]= xMn*exp(dx*i);
+  return xax;
 }

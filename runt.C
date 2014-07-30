@@ -1,8 +1,10 @@
 void runt(){
   //
-  //  TString dtPath = "/data1/LHC14c2_p2/195483/001";
-  //  TString dtPath = "inpLHC14c2_p2_195483.txt";
-    TString dtPath = "~/ppbench";
+  //TString dtPath = "/data1/LHC14c2_p2/195483/001";
+  //  TString dtPath = "inpLHC14c2_p2_195483.txt"; // pA MB
+  TString dtPath = "inpLHC10h8.txt";  // PbPb MB
+  //  TString dtPath = "xxx.txt";
+  //   TString dtPath = "~/ppbench";
   //
   AliCDBManager* man = AliCDBManager::Instance();
   man->SetDefaultStorage("local:///home/shahoian/ALICE/Aliroot/OCDB");

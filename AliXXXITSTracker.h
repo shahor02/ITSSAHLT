@@ -14,6 +14,7 @@
 //------- compilation options, comment out all for best performance ------
 #define _TIMING_                            // print timing info
 //#define _CONTROLH_                          // fill control histos
+//#define _DEBUG_                             // print debug info
 //------------------------------------------------------------------------
 
 class AliITSRecPoint;
@@ -110,10 +111,7 @@ class AliXXXITSTracker : public TObject
   Bool_t  FitTrackVertex();
   AliESDVertex& GetTrackVertex()      const       {return (AliESDVertex&)fTrackVertex;}
   // methods for vertex reconstruction ------<<<
-
-#ifdef _TIMING_
-  void PrintTiming();
-#endif
+  //
  protected:
   //
   AliXXXLayer* fLayers[kNLrActive];
@@ -187,6 +185,9 @@ class AliXXXITSTracker : public TObject
 #ifdef _TIMING_
  public:
   enum {kSWTotal,kSWTracklets,kSWTracks,kSWVertex,kNSW};
+  void PrintTiming();
+  const TStopwatch& GetStopwatch(int i)     const {return fSW[i];}
+  const char*       GetStopwatchName(int i) const {return fgkSWNames[i];}
  protected:
   static const char* fgkSWNames[kNSW];
   TStopwatch fSW[kNSW];
@@ -209,6 +210,7 @@ class AliXXXITSTracker : public TObject
   void FillTrackingControlHistos(int lrID,int lbl,const AliExternalTrackParam* bestTr,
 				 const double cpar[2],const double ccov[3],const AliITSRecPoint* bestCl);
   void BookHistos();
+  Double_t* DefLogAx(double xMn,double xMx, int nbin);
  public:
   void SaveHistos(const char* outFName="XXXITSTrackerControlH.root");
   TObjArray* GetHistos() const {return (TObjArray*)&fArrHisto;}
