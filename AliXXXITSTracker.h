@@ -13,7 +13,7 @@
 
 //------- compilation options, comment out all for best performance ------
 #define _TIMING_                            // print timing info
-//#define _CONTROLH_                          // fill control histos
+#define _CONTROLH_                          // fill control histos
 //#define _DEBUG_                             // print debug info
 //------------------------------------------------------------------------
 
@@ -61,6 +61,7 @@ class AliXXXITSTracker : public TObject
   void ClearTracks()                               {fTracks.clear();}
   //
   void SetSPDVertex(const AliESDVertex* v)         {fSPDVertex = v;}
+  const AliESDVertex* GetSPDVertex()  const        {return fSPDVertex;}
   void AddCluster(AliITSRecPoint* cl);
   void SetBz(float v)                              {fBz = v;}
   //
@@ -82,6 +83,7 @@ class AliXXXITSTracker : public TObject
   int  GetNTracks()                    const        {return fNTracks;}
   void PrintTracklets()                const;
   void PrintTracklet(Int_t itr)        const;
+  const AliXXXITSTracker::SPDtracklet_t& GetTracklet(int i) const {return fTracklets[i];}
   // methods for trackleting ----------------<<<
   //
   // methods for track reconstruction ------->>>
@@ -105,6 +107,9 @@ class AliXXXITSTracker : public TObject
   Int_t   GetTrackletMCTruth(AliXXXITSTracker::SPDtracklet_t& trlet) const;
   void    RefitInward();
   Bool_t  RefitInward(int itr);
+  void    SetMaxMissedLayers(int n=0)  { fMaxMissedLayers = n;}
+  Int_t   GetMaxMissedLayers()    const  { return fMaxMissedLayers;}
+  const AliXXXITSTracker::ITStrack_t& GetTrack(int i) const {return fTracks[i];}
   // methods for track reconstruction -------<<<
   //
   // methods for vertex reconstruction ------>>>

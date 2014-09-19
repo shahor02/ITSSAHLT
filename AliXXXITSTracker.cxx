@@ -319,6 +319,10 @@ Int_t AliXXXITSTracker::AssociateClusterOfL2(int icl2)
     //
     float dTheta = (tg2Inv-tg1Inv)/(1.+tg1Inv*tg1Inv);        // fast check on theta
     if (TMath::Abs(dTheta)>fDThetaTrackletSc) continue;
+
+    double tt1 = TMath::ATan2(cli1->r,z1);
+    double tt2 = TMath::ATan2(cli2->r,z2);
+    //    printf("DTht:%+e (%+e %+e) -> %+e\n",tt2-tt1,tt1,tt2, dTheta );
     //
     float dPhi = cli1->phi - cli2->phi;                       // fast check on phi
     if (dPhi>TMath::Pi()) dPhi = TMath::TwoPi()-dPhi;
@@ -382,6 +386,7 @@ void AliXXXITSTracker::Tracklets2Tracks()
   //
   for (int itr=0;itr<nTrk;itr++) {
     SPDtracklet_t& trlet = fTracklets[itr];
+    //    if (trlet.label<0) continue; //RSTMP
     //
 #ifdef _DEBUG_
     printf("TestTracklet %d\t|",itr);
@@ -644,6 +649,14 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
     while ( (icl=lrA->GetNextClusterInfoID())!=-1) {
       AliXXXLayer::ClsInfo_t *cli = lrA->GetClusterInfo(icl);
       AliITSRecPoint *cl=lrA->GetClusterUnSorted(cli->index);
+
+      /*      //RSTMP
+      Bool_t okcl = kFALSE;
+      for (int i=0;i<3;i++) {
+	if (cl->GetLabel(i)==track.label && track.label>=0) {okcl=kTRUE;nCl=1; break;}
+      }
+      if (!okcl) continue;
+      */
       int detId = cl->GetVolumeId()-lrA->GetVIDOffset();
       AliXXXLayer::ITSDetInfo_t& detInfo = lrA->GetDetInfo(detId);
       trCopy = track.paramOut;
@@ -652,12 +665,12 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
       double ccov[3]={ cl->GetSigmaY2() + GetClSystYErr2(lrIDA) , 0., cl->GetSigmaZ2() + GetClSystZErr2(lrIDA)};
       double chi2cl = trCopy.GetPredictedChi2(cpar,ccov);
       //
+#ifdef _DEBUG_      
       float clXYZ[3]; cl->GetGlobalXYZ(clXYZ);
       double trXYZ[3]; trCopy.GetXYZ(trXYZ);
       Float_t xCl, alphaCl; 
       cl->GetXAlphaRefPlane(xCl,alphaCl);
-      //
-#ifdef _DEBUG_      
+
       printf("cl%d Chi2:%.2f Dyz: %+e %+e Err: %e %e %e |Lb:",iclt++,chi2cl, 
 	     cl->GetY()-trCopy.GetY(),cl->GetZ()-trCopy.GetZ(),
 	     TMath::Sqrt(ccov[0]),ccov[1],TMath::Sqrt(ccov[2])); //TMP
@@ -697,7 +710,16 @@ Bool_t AliXXXITSTracker::FollowToLayer(AliXXXITSTracker::ITStrack_t& track, Int_
       track.paramOut = bestTr;
       track.clID[lrIDA] = iclBest;      
       track.ncl++;
-      track.chi2 += chi2Best;      
+      track.chi2 += chi2Best; 
+      //
+#ifdef _CONTROLH_   
+      // update label on the fly
+      Bool_t corrLB = kFALSE;
+      if (track.label>=0) {
+	for (int i=0;i<3;i++) if (bestCl->GetLabel(i)==track.label) {corrLB=kTRUE; break;}
+	if (!corrLB) track.label = -track.label;
+      }
+#endif
     }
   }
   //

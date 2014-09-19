@@ -1,10 +1,10 @@
 void runt(){
   //
   //TString dtPath = "/data1/LHC14c2_p2/195483/001";
-  //  TString dtPath = "inpLHC14c2_p2_195483.txt"; // pA MB
-  TString dtPath = "inpLHC10h8.txt";  // PbPb MB
+  // TString dtPath = "inpLHC14c2_p2_195483.txt"; // pA MB
+  TString dtPath = "inpLHC10h8S.txt";//"/data1/LHC10h8/137366/011/AliESDs.root";//"inpLHC10h8.txt";  // PbPb MB
   //  TString dtPath = "xxx.txt";
-  //   TString dtPath = "~/ppbench";
+  //TString dtPath = "~/ppbench";
   //
   AliCDBManager* man = AliCDBManager::Instance();
   man->SetDefaultStorage("local:///home/shahoian/ALICE/Aliroot/OCDB");
@@ -21,7 +21,7 @@ void runt(){
   TString inpData;
   if (!(dtPath.EndsWith(".txt")||dtPath.EndsWith(".dat"))) {
     inpData = Form("%s/AliESDs.root",dtPath.Data());
-    gSystem->Exec(Form("ln -s -f %s/geometry.root ./",dtPath.Data()));
+    //   gSystem->Exec(Form("ln -s -f %s/geometry.root ./",dtPath.Data()));
   }
   else inpData = dtPath;
   printf("InputData : %s\n",inpData.Data());
