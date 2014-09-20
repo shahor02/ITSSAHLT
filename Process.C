@@ -202,7 +202,7 @@ void ProcessEvent(int iEv)
   runLoader->GetEvent(iEv);
   treeInp->GetEvent(iEv);
   AliStack *stack = runLoader->Stack(); 
-  Int_t nParticles = stack->GetNtrack();
+  Int_t nParticles = stack ? stack->GetNtrack() : 0;
   Int_t nTracks= esd->GetNumberOfTracks();
   printf("Ntr: %d NPart: %d\n",nTracks,nParticles);
   const AliESDVertex* vtx = esd->GetPrimaryVertexSPD();
