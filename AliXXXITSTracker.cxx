@@ -319,18 +319,18 @@ Int_t AliXXXITSTracker::AssociateClusterOfL2(int icl2)
     //
     float dTheta = (tg2Inv-tg1Inv)/(1.+tg1Inv*tg1Inv);        // fast check on theta
     if (TMath::Abs(dTheta)>fDThetaTrackletSc) continue;
-
-    double tt1 = TMath::ATan2(cli1->r,z1);
-    double tt2 = TMath::ATan2(cli2->r,z2);
-    //    printf("DTht:%+e (%+e %+e) -> %+e\n",tt2-tt1,tt1,tt2, dTheta );
     //
     float dPhi = cli1->phi - cli2->phi;                       // fast check on phi
     if (dPhi>TMath::Pi()) dPhi = TMath::TwoPi()-dPhi;
+    else if (dPhi<-TMath::Pi()) dPhi += TMath::TwoPi();
     double dPhiS = TMath::Abs(dPhi)-fPhiShiftSc;
     if (TMath::Abs(dPhiS)>fDPhiTrackletSc) continue;
     //
     float chi2 = dTheta*dTheta*fDThSig2Inv + dPhiS*dPhiS*fDPhSig2Inv; // check final chi2
-    if (chi2>1.) continue;
+    if (chi2>1.) {
+      Blacklist(icl1,icl2);
+      continue;
+    }
     nCand++;
     if (chi2>chiBest) continue;
     // check if cl1 is already associated with better 
@@ -346,16 +346,20 @@ Int_t AliXXXITSTracker::AssociateClusterOfL2(int icl2)
     if (!oldId) { // store new tracklet
       fTracklets.push_back(trk);
       fSPD1Tracklet[trk.id1] = fTracklets.size(); // refer from clusters to tracklet (id+1)
+      fSPD2Discard[icl2] = true; // mark as used
       Blacklist(trk.id1,trk.id2);
       return 1;
     }
-    SPDtracklet_t& oldTrk = (SPDtracklet_t&)fSPD1Tracklet[--oldId];
+    SPDtracklet_t& oldTrk = (SPDtracklet_t&)fTracklets[--oldId];
     if (oldTrk.chi2 < trk.chi2) { // previous is better 
       Blacklist(trk.id1,trk.id2);  // shall we blacklist new combination?
       if (nCand==1)  fSPD2Discard[icl2] = true; // there was just 1 candidate and it is discarded
       return 0;
     }
-    oldTrk = trk;         // new combination is better, overwrite it with new one
+    // new combination is better, overwrite the old one with new one, marking old L2 cluster free
+    fSPD2Discard[oldTrk.id2] = false; // mark as free
+    fSPD2Discard[icl2] = true; // mark as used
+    oldTrk = trk;
     Blacklist(trk.id1,trk.id2);
     return 1;
   }

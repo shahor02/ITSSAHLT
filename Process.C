@@ -407,6 +407,24 @@ void CheckRecStatus()
     }
   }
   //
+  AliXXXLayer* lr0 = tracker->GetLayer(0);
+  AliXXXLayer* lr1 = tracker->GetLayer(1);
+  for (int itrm=0;itrm<nTrkMC;itrm++) {
+    if (ntlCorr[itrm]+ntlFake[itrm]<2) continue;
+    printf("\nExtra for tr %d nC:%d nF:%d\n",itrm,ntlCorr[itrm],ntlFake[itrm]);
+    //
+    int cnt = 0;
+    for (int itr=0;itr<nTrk;itr++) {
+      const AliXXXITSTracker::SPDtracklet_t& trlet = tracker->GetTracklet(itr);
+      if (TMath::Abs(trlet.label)!=itrm) continue;
+      AliXXXLayer::ClsInfo_t* clinf0 = lr0->GetClusterInfo(trlet.id1);
+      AliXXXLayer::ClsInfo_t* clinf1 = lr1->GetClusterInfo(trlet.id2);
+      printf("#%2d%s%4d chi:%.2f [%4d/%3d] [%4d/%3d]\n",cnt++,trlet.label<0 ? "-":"+",itr,trlet.chi2,
+             trlet.id1,clinf0->detid,
+             trlet.id2,clinf1->detid);
+    }
+  }
+  //
   AliMultiplicity* mltESD = esd->GetMultiplicity();
   nTrk = mltESD->GetNumberOfTracklets();
   for (int itr=0;itr<nTrk;itr++) {
